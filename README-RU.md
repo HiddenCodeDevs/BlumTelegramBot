@@ -111,4 +111,4 @@ python main.py
 
 Для поддержки или вопросов, свяжитесь со мной в Telegram:
 
-[![Static Badge](https://img.shields.io/badge/Телеграм-автор_бота-link?style=for-the-badge&logo=telegram&logoColor=white&logoSize=auto&color=blue)](https://t.me/ВАШЮЗЕРНЕЙМВТГ)
+[![Static Badge](https://img.shields.io/badge/Телеграм-автор_бота-link?style=for-the-badge&logo=telegram&logoColor=white&logoSize=auto&color=blue)](https://t.me/unknxwnplxya)
