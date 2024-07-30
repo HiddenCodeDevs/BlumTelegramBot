@@ -1,5 +1,6 @@
 import asyncio
 import random
+import string
 from time import time
 from urllib.parse import unquote, quote
 
@@ -190,33 +191,108 @@ class Tapper:
                 f"<light-yellow>{self.session_name}</light-yellow> | Unknown error during Authorization: {error}")
             await asyncio.sleep(delay=3)
 
+    #async def login(self, http_client: aiohttp.ClientSession, initdata):
+    #    try:
+    #        json_data = {"query": initdata, "username": self.username,
+    #                     "referralToken": self.start_param.split('_')[1]}
+    #
+    #        http_client.headers['Host'] = "gateway.blum.codes"
+    #
+    #        resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
+    #                                      json=json_data, ssl=False)
+    #        resp_json = await resp.json()
+    #
+    #        if (resp_json['message'] is not None) and (
+    #                resp_json['message'] == 'account is already connected to another user'
+    #                or resp_json['message'] == 'rpc error: code = AlreadyExists desc = '
+    #                                           'Username is not available'):
+    #            json_data = {"query": initdata}
+    #            resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
+    #                                          json=json_data, ssl=False)
+    #            resp_json = await resp.json()
+    #
+    #            return resp_json.get("token").get("access")
+    #        else:
+    #            self.success(f"Successfully registered using ref - {self.start_param}")
+    #
+    #
+    #
+    #        return resp_json.get("token").get("access")
+    #    except Exception as error:
+    #        logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Login error {error}")
+
     async def login(self, http_client: aiohttp.ClientSession, initdata):
         try:
-            json_data = {"query": initdata, "username": self.username,
-                         "referralToken": self.start_param.split('_')[1]}
+            if settings.USE_REF is False:
 
-            http_client.headers['Host'] = "gateway.blum.codes"
-
-            resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
-                                          json=json_data, ssl=False)
-            resp_json = await resp.json()
-
-            if (resp_json['message'] is not None) and (
-                    resp_json['message'] == 'account is already connected to another user'
-                    or resp_json['message'] == 'rpc error: code = AlreadyExists desc = '
-                                               'Username is not available'):
                 json_data = {"query": initdata}
-                resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
+                resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
+                                              "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
                 resp_json = await resp.json()
 
                 return resp_json.get("token").get("access")
+
             else:
-                self.success(f"Successfully registered using ref - {self.start_param}")
 
-            http_client.headers['Host'] = "game-domain.blum.codes"
+                json_data = {"query": initdata, "username": self.username,
+                             "referralToken": self.start_param.split('_')[1]}
 
-            return resp_json.get("token").get("access")
+                resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
+                                              "/PROVIDER_TELEGRAM_MINI_APP",
+                                              json=json_data, ssl=False)
+
+                resp_json = await resp.json()
+
+                if resp_json.get("message") == "rpc error: code = AlreadyExists desc = Username is not available":
+                    while True:
+                        name = self.username
+                        rand_letters = ''.join(random.choices(string.ascii_lowercase, k=random.randint(3, 8)))
+                        new_name = name + rand_letters
+
+                        json_data = {"query": initdata, "username": new_name,
+                                     "referralToken": self.start_param.split('_')[1]}
+
+                        resp = await http_client.post(
+                            "https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
+                            json=json_data, ssl=False)
+
+                        resp_json = await resp.json()
+
+                        if resp_json.get("token"):
+                            self.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
+                            return resp_json.get("token").get("access")
+
+                        elif resp_json.get("message") == 'account is already connected to another user':
+
+                            json_data = {"query": initdata}
+                            resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
+                                                          "/PROVIDER_TELEGRAM_MINI_APP",
+                                                          json=json_data, ssl=False)
+                            resp_json = await resp.json()
+
+                            return resp_json.get("token").get("access")
+
+                        else:
+                            self.info(f'Username taken, retrying register with new name')
+                            await asyncio.sleep(1)
+
+                elif resp_json.get("message") == 'account is already connected to another user':
+
+                    json_data = {"query": initdata}
+                    resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
+                                                  "/PROVIDER_TELEGRAM_MINI_APP",
+                                                  json=json_data, ssl=False)
+                    resp_json = await resp.json()
+
+                    return resp_json.get("token").get("access")
+
+                elif resp_json.get("token"):
+
+                    self.success(f'Registered using ref - {self.start_param} and nickname - {self.username}')
+                    return resp_json.get("token").get("access")
+
+
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Login error {error}")
 
@@ -341,7 +417,6 @@ class Tapper:
 
     async def friend_balance(self, http_client: aiohttp.ClientSession):
         try:
-            http_client.headers['Host'] = "gateway.blum.codes"
 
             resp = await http_client.get("https://gateway.blum.codes/v1/friends/balance", ssl=False)
             resp_json = await resp.json()
@@ -356,8 +431,6 @@ class Tapper:
                 claim_amount = resp_json.get("amountForClaim")
                 is_available = resp_json.get("canClaim")
 
-            http_client.headers['Host'] = "game-domain.blum.codes"
-
             return (claim_amount,
                     is_available)
         except Exception as e:
@@ -365,7 +438,7 @@ class Tapper:
 
     async def friend_claim(self, http_client: aiohttp.ClientSession):
         try:
-            http_client.headers['Host'] = "gateway.blum.codes"
+
 
             resp = await http_client.post("https://gateway.blum.codes/v1/friends/claim", ssl=False)
             resp_json = await resp.json()
@@ -376,7 +449,7 @@ class Tapper:
                 resp_json = await resp.json()
                 amount = resp_json.get("claimBalance")
 
-            http_client.headers['Host'] = "game-domain.blum.codes"
+
 
             return amount
         except Exception as e:

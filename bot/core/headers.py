@@ -3,7 +3,6 @@ headers = {
     'Accept-Language': 'ru-RU,ru;q=0.9',
     'Connection': 'keep-alive',
     'Content-Type': 'application/json',
-    'Host': 'game-domain.blum.codes',
     'Origin': 'https://telegram.blum.codes',
     'Sec-Fetch-Dest': 'empty',
     'Sec-Fetch-Mode': 'cors',

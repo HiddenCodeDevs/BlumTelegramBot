@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     PLAY_GAMES: bool = True
     POINTS: list[int] = [190, 230]
 
+    USE_REF: bool = False
     REF_ID: str = ''
 
     USE_PROXY_FROM_FILE: bool = False
