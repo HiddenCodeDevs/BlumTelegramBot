@@ -31,6 +31,7 @@ class Tapper:
         self.last_name = None
         self.fullname = None
         self.start_param = None
+        self.peer = None
 
         self.session_ug_dict = self.load_user_agents() or []
 
@@ -134,7 +135,8 @@ class Tapper:
 
             while True:
                 try:
-                    peer = await self.tg_client.resolve_peer('BlumCryptoBot')
+                    if self.peer is None:
+                        self.peer = await self.tg_client.resolve_peer('BlumCryptoBot')
                     break
                 except FloodWait as fl:
                     fls = fl.value
@@ -145,20 +147,18 @@ class Tapper:
                     await asyncio.sleep(fls + 3)
 
             if settings.REF_ID == '':
-                start_param = 'ref_QwD3tLsY8f'
                 self.start_param = 'ref_QwD3tLsY8f'
             else:
-                start_param = settings.REF_ID
-                self.start_param = start_param
+                self.start_param = settings.REF_ID
 
-            InputBotApp = types.InputBotAppShortName(bot_id=peer, short_name="app")
+            InputBotApp = types.InputBotAppShortName(bot_id=self.peer, short_name="app")
 
             web_view = await self.tg_client.invoke(RequestAppWebView(
-                peer=peer,
+                peer=self.peer,
                 app=InputBotApp,
                 platform='android',
                 write_allowed=True,
-                start_param=start_param
+                start_param=self.start_param
             ))
 
             auth_url = web_view.url
