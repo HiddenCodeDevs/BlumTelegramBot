@@ -201,12 +201,16 @@ class Tapper:
                                           json=json_data, ssl=False)
             resp_json = await resp.json()
 
-            if resp_json['message'] and (resp_json['message'] == 'account is already connected to another user'
-                    or resp_json['message'] == 'rpc error: code = AlreadyExists desc = Username is not available'):
+            if (resp_json['message'] is not None) and (
+                    resp_json['message'] == 'account is already connected to another user'
+                    or resp_json['message'] == 'rpc error: code = AlreadyExists desc = '
+                                               'Username is not available'):
                 json_data = {"query": initdata}
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
                 resp_json = await resp.json()
+
+                return resp_json.get("token").get("access")
             else:
                 self.success(f"Successfully registered using ref - {self.start_param}")
 
