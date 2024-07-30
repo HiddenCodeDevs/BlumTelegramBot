@@ -352,7 +352,6 @@ class Tapper:
             resp = await http_client.post("https://game-domain.blum.codes/api/v1/game/claim", json=json_data,
                                           ssl=False)
             if resp.status != 200:
-                await asyncio.sleep(1)
                 resp = await http_client.post("https://game-domain.blum.codes/api/v1/game/claim", json=json_data,
                                               ssl=False)
 
@@ -366,7 +365,6 @@ class Tapper:
         try:
             resp = await http_client.post("https://game-domain.blum.codes/api/v1/farming/claim", ssl=False)
             if resp.status != 200:
-                await asyncio.sleep(1)
                 resp = await http_client.post("https://game-domain.blum.codes/api/v1/farming/claim", ssl=False)
 
             resp_json = await resp.json()
@@ -380,7 +378,6 @@ class Tapper:
             resp = await http_client.post("https://game-domain.blum.codes/api/v1/farming/start", ssl=False)
 
             if resp.status != 200:
-                await asyncio.sleep(1)
                 resp = await http_client.post("https://game-domain.blum.codes/api/v1/farming/start", ssl=False)
         except Exception as e:
             self.error(f"Error occurred during start: {e}")
@@ -390,7 +387,6 @@ class Tapper:
 
             resp = await http_client.get("https://gateway.blum.codes/v1/friends/balance", ssl=False)
             resp_json = await resp.json()
-            await asyncio.sleep(1)
 
             claim_amount = resp_json.get("amountForClaim")
             is_available = resp_json.get("canClaim")
@@ -414,7 +410,6 @@ class Tapper:
             resp_json = await resp.json()
             amount = resp_json.get("claimBalance")
             if resp.status != 200:
-                await asyncio.sleep(1)
                 resp = await http_client.post("https://gateway.blum.codes/v1/friends/claim", ssl=False)
                 resp_json = await resp.json()
                 amount = resp_json.get("claimBalance")
@@ -429,7 +424,6 @@ class Tapper:
         try:
             resp = await http_client.get("https://game-domain.blum.codes/api/v1/user/balance", ssl=False)
             resp_json = await resp.json()
-            await asyncio.sleep(1)
 
             timestamp = resp_json.get("timestamp")
             play_passes = resp_json.get("playPasses")
@@ -452,7 +446,6 @@ class Tapper:
             resp = await http_client.post("https://game-domain.blum.codes/api/v1/daily-reward?offset=-180",
                                           ssl=False)
             txt = await resp.text()
-            await asyncio.sleep(1)
             return True if txt == 'OK' else txt
         except Exception as e:
             self.error(f"Error occurred during claim daily reward: {e}")
@@ -467,6 +460,7 @@ class Tapper:
 
     async def run(self, proxy: str | None) -> None:
         access_token_created_time = 0
+        access_token = None
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
 
@@ -481,8 +475,6 @@ class Tapper:
                     await self.tg_client.connect()
                     await asyncio.sleep(1)
                     await self.tg_client.disconnect()
-
-                access_token = None
 
                 tg_web_data = await self.get_tg_web_data(proxy=proxy)
                 tg_web_data_parts = tg_web_data.split('&')
@@ -535,32 +527,37 @@ class Tapper:
                     elif play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
                         await self.play_game(http_client=http_client, play_passes=play_passes)
 
-                    await asyncio.sleep(random.uniform(1, 3))
+                    #await asyncio.sleep(random.uniform(1, 3))
 
-                    try:
-                        timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
-                        if start_time is None and end_time is None and max_try > 0:
-                            await self.start(http_client=http_client)
-                            self.info(f"<lc>[FARMING]</lc> Start farming!")
-                            max_try -= 1
+                    while True:
+                        try:
+                            timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
 
-                        elif (start_time is not None and end_time is not None and timestamp is not None and
-                              timestamp >= end_time and max_try > 0):
-                            timestamp, balance = await self.claim(http_client=http_client)
-                            self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
-                            max_try -= 1
+                            if start_time is None and end_time is None and max_try > 0:
+                                await self.start(http_client=http_client)
+                                self.info(f"<lc>[FARMING]</lc> Start farming!")
+                                max_try -= 1
 
-                        elif end_time is not None and timestamp is not None:
-                            sleep_duration = end_time - timestamp
-                            self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
-                            max_try += 1
-                            await asyncio.sleep(sleep_duration)
+                            elif (start_time is not None and end_time is not None and timestamp is not None and
+                                  timestamp >= end_time and max_try > 0):
+                                timestamp, balance = await self.claim(http_client=http_client)
+                                self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
+                                max_try -= 1
 
-                        elif max_try == 0:
-                            break
+                            elif end_time is not None and timestamp is not None:
+                                sleep_duration = end_time - timestamp
+                                self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
+                                max_try += 1
+                                await asyncio.sleep(sleep_duration)
 
-                    except Exception as e:
-                        self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
+                            elif max_try >= 1:
+                                continue
+
+                            elif max_try == 0:
+                                break
+
+                        except Exception as e:
+                            self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
 
             except InvalidSession as error:
                 raise error

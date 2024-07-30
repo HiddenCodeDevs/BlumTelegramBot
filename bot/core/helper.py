@@ -1,8 +1,5 @@
-from datetime import timedelta
-
-
 def format_duration(seconds):
-    duration_td = timedelta(seconds=seconds)
-    hours, remainder = divmod(duration_td.total_seconds(), 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return f"{int(hours)} hours {int(minutes)} minutes {int(seconds)} seconds"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    remaining_seconds = seconds % 60
+    return f"{hours} hours, {minutes} mins, {remaining_seconds} secs"
