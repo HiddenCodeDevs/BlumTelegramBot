@@ -477,6 +477,11 @@ class Tapper:
 
         while True:
             try:
+                if not self.tg_client.is_connected:
+                    await self.tg_client.connect()
+                    await asyncio.sleep(1)
+                    await self.tg_client.disconnect()
+
                 access_token = None
 
                 tg_web_data = await self.get_tg_web_data(proxy=proxy)
