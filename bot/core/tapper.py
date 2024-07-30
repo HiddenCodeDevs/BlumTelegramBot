@@ -191,36 +191,6 @@ class Tapper:
                 f"<light-yellow>{self.session_name}</light-yellow> | Unknown error during Authorization: {error}")
             await asyncio.sleep(delay=3)
 
-    #async def login(self, http_client: aiohttp.ClientSession, initdata):
-    #    try:
-    #        json_data = {"query": initdata, "username": self.username,
-    #                     "referralToken": self.start_param.split('_')[1]}
-    #
-    #        http_client.headers['Host'] = "gateway.blum.codes"
-    #
-    #        resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
-    #                                      json=json_data, ssl=False)
-    #        resp_json = await resp.json()
-    #
-    #        if (resp_json['message'] is not None) and (
-    #                resp_json['message'] == 'account is already connected to another user'
-    #                or resp_json['message'] == 'rpc error: code = AlreadyExists desc = '
-    #                                           'Username is not available'):
-    #            json_data = {"query": initdata}
-    #            resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
-    #                                          json=json_data, ssl=False)
-    #            resp_json = await resp.json()
-    #
-    #            return resp_json.get("token").get("access")
-    #        else:
-    #            self.success(f"Successfully registered using ref - {self.start_param}")
-    #
-    #
-    #
-    #        return resp_json.get("token").get("access")
-    #    except Exception as error:
-    #        logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Login error {error}")
-
     async def login(self, http_client: aiohttp.ClientSession, initdata):
         try:
             if settings.USE_REF is False:
