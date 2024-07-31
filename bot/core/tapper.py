@@ -529,7 +529,7 @@ class Tapper:
 
                     #await asyncio.sleep(random.uniform(1, 3))
 
-                    while True:
+                    while max_try != 0:
                         try:
                             timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
 
@@ -553,8 +553,8 @@ class Tapper:
                             elif max_try >= 1:
                                 continue
 
-                            elif max_try == 0:
-                                break
+                            #elif max_try == 0:
+                            #    break
 
                         except Exception as e:
                             self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
