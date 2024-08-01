@@ -201,7 +201,7 @@ class Tapper:
                                               json=json_data, ssl=False)
                 resp_json = await resp.json()
 
-                return resp_json.get("token").get("access")
+                return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
             else:
 
@@ -231,7 +231,7 @@ class Tapper:
 
                         if resp_json.get("token"):
                             self.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
-                            return resp_json.get("token").get("access")
+                            return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                         elif resp_json.get("message") == 'account is already connected to another user':
 
@@ -241,7 +241,7 @@ class Tapper:
                                                           json=json_data, ssl=False)
                             resp_json = await resp.json()
 
-                            return resp_json.get("token").get("access")
+                            return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                         else:
                             self.info(f'Username taken, retrying register with new name')
@@ -255,12 +255,12 @@ class Tapper:
                                                   json=json_data, ssl=False)
                     resp_json = await resp.json()
 
-                    return resp_json.get("token").get("access")
+                    return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                 elif resp_json.get("token"):
 
                     self.success(f'Registered using ref - {self.start_param} and nickname - {self.username}')
-                    return resp_json.get("token").get("access")
+                    return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
 
         except Exception as error:
@@ -450,6 +450,14 @@ class Tapper:
         except Exception as e:
             self.error(f"Error occurred during claim daily reward: {e}")
 
+    async def refresh_token(self, http_client: aiohttp.ClientSession, token):
+        json_data = {'refresh': token}
+        resp = await http_client.post("https://gateway.blum.codes/v1/auth/refresh", json=json_data, ssl=False)
+        resp_json = await resp.json()
+        #print(f'refresh {resp_json}')
+
+        return resp_json.get('access'), resp_json.get('refresh')
+
     async def check_proxy(self, http_client: aiohttp.ClientSession, proxy: Proxy) -> None:
         try:
             response = await http_client.get(url='https://httpbin.org/ip', timeout=aiohttp.ClientTimeout(5))
@@ -461,6 +469,7 @@ class Tapper:
     async def run(self, proxy: str | None) -> None:
         access_token_created_time = 0
         access_token = None
+        refresh_token = None
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
 
@@ -469,38 +478,36 @@ class Tapper:
         if proxy:
             await self.check_proxy(http_client=http_client, proxy=proxy)
 
+        tg_web_data = await self.get_tg_web_data(proxy=proxy)
+        tg_web_data_parts = tg_web_data.split('&')
+        user_data = tg_web_data_parts[0].split('=')[1]
+        chat_instance = tg_web_data_parts[1].split('=')[1]
+        chat_type = tg_web_data_parts[2].split('=')[1]
+        start_param = tg_web_data_parts[3].split('=')[1]
+        auth_date = tg_web_data_parts[4].split('=')[1]
+        hash_value = tg_web_data_parts[5].split('=')[1]
+
+        user_data_encoded = quote(user_data)
+
+        init_data = (f"user={user_data_encoded}&chat_instance={chat_instance}"
+                     f"&chat_type={chat_type}&start_param={start_param}&auth_date={auth_date}&hash={hash_value}")
+
+        #print(init_data)
+
         while True:
             try:
-                if not self.tg_client.is_connected:
-                    await self.tg_client.connect()
-                    await asyncio.sleep(1)
-                    await self.tg_client.disconnect()
+                access_token, refresh_token = await self.login(http_client=http_client, initdata=init_data)
 
-                tg_web_data = await self.get_tg_web_data(proxy=proxy)
-                tg_web_data_parts = tg_web_data.split('&')
-                user_data = tg_web_data_parts[0].split('=')[1]
-                chat_instance = tg_web_data_parts[1].split('=')[1]
-                chat_type = tg_web_data_parts[2].split('=')[1]
-                start_param = tg_web_data_parts[3].split('=')[1]
-                auth_date = tg_web_data_parts[4].split('=')[1]
-                hash_value = tg_web_data_parts[5].split('=')[1]
-
-                user_data_encoded = quote(user_data)
-
-                init_data = (f"user={user_data_encoded}&chat_instance={chat_instance}"
-                             f"&chat_type={chat_type}&start_param={start_param}&auth_date={auth_date}&hash={hash_value}")
-
-                #print(init_data)
+                http_client.headers["Authorization"] = f"Bearer {access_token}"
 
                 if time() - access_token_created_time >= 3600:
-                    access_token = await self.login(http_client=http_client, initdata=init_data)
+                    access_token, refresh_token = await self.refresh_token(http_client=http_client, token=access_token)
 
                     http_client.headers["authorization"] = f"Bearer {access_token}"
-                    headers["authorization"] = f"Bearer {access_token}"
 
                     access_token_created_time = time()
 
-                if access_token:
+                if access_token and time() - access_token_created_time < 3600:
                     max_try = 2
 
                     self.success("Logged in successfully")
@@ -522,9 +529,7 @@ class Tapper:
                         amount = await self.friend_claim(http_client=http_client)
                         self.success(f"Claimed friend ref reward {amount}")
 
-                    if settings.PLAY_GAMES is False:
-                        play_passes = 0
-                    elif play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
+                    if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
                         await self.play_game(http_client=http_client, play_passes=play_passes)
 
                     #await asyncio.sleep(random.uniform(1, 3))
