@@ -33,6 +33,7 @@ class Tapper:
         self.fullname = None
         self.start_param = None
         self.peer = None
+        self.first_run = None
 
         self.session_ug_dict = self.load_user_agents() or []
 
@@ -510,7 +511,9 @@ class Tapper:
                 if access_token and time() - access_token_created_time < 3600:
                     max_try = 2
 
-                    self.success("Logged in successfully")
+                    if self.first_run is not True:
+                        self.success("Logged in successfully")
+                        self.first_run = True
 
                     #print(access_token)
 
@@ -534,35 +537,33 @@ class Tapper:
 
                     #await asyncio.sleep(random.uniform(1, 3))
 
-                    while max_try != 0:
-                        try:
-                            timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
+                    try:
+                        timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
 
-                            if start_time is None and end_time is None and max_try > 0:
-                                await self.start(http_client=http_client)
-                                self.info(f"<lc>[FARMING]</lc> Start farming!")
-                                max_try -= 1
+                        if start_time is None and end_time is None and max_try > 0:
+                            await self.start(http_client=http_client)
+                            self.info(f"<lc>[FARMING]</lc> Start farming!")
+                            await asyncio.sleep(1)
+                            max_try -= 1
 
-                            elif (start_time is not None and end_time is not None and timestamp is not None and
-                                  timestamp >= end_time and max_try > 0):
-                                timestamp, balance = await self.claim(http_client=http_client)
-                                self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
-                                max_try -= 1
+                        elif (start_time is not None and end_time is not None and timestamp is not None and
+                              timestamp >= end_time and max_try > 0):
+                            timestamp, balance = await self.claim(http_client=http_client)
+                            self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
+                            await asyncio.sleep(1)
+                            max_try -= 1
 
-                            elif end_time is not None and timestamp is not None:
-                                sleep_duration = end_time - timestamp
-                                self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
-                                max_try += 1
-                                await asyncio.sleep(sleep_duration)
+                        elif end_time is not None and timestamp is not None:
+                            sleep_duration = end_time - timestamp
+                            self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
+                            max_try += 1
+                            await asyncio.sleep(sleep_duration)
 
-                            elif max_try >= 1:
-                                continue
+                        elif max_try == 0:
+                            break
 
-                            #elif max_try == 0:
-                            #    break
-
-                        except Exception as e:
-                            self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
+                    except Exception as e:
+                        self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
 
             except InvalidSession as error:
                 raise error
