@@ -489,8 +489,6 @@ class Tapper:
 
                 http_client.headers["authorization"] = f"Bearer {access_token}"
 
-                max_try = 2
-
                 if self.first_run is not True:
                     self.success("Logged in successfully")
                     self.first_run = True
@@ -524,23 +522,17 @@ class Tapper:
                         await self.start(http_client=http_client)
                         self.info(f"<lc>[FARMING]</lc> Start farming!")
                         await asyncio.sleep(1)
-                        max_try -= 1
 
                     elif (start_time is not None and end_time is not None and timestamp is not None and
                           timestamp >= end_time and max_try > 0):
                         timestamp, balance = await self.claim(http_client=http_client)
                         self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
                         await asyncio.sleep(1)
-                        max_try -= 1
 
                     elif end_time is not None and timestamp is not None:
                         sleep_duration = end_time - timestamp
                         self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
-                        max_try += 1
                         await asyncio.sleep(sleep_duration)
-
-                    elif max_try == 0:
-                        break
 
                 except Exception as e:
                     self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
