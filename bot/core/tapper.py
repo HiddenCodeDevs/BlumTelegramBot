@@ -166,8 +166,7 @@ class Tapper:
             auth_url = web_view.url
             #print(auth_url)
             tg_web_data = unquote(
-                string=unquote(
-                    string=auth_url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0]))
+                string=auth_url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0])
 
             try:
                 if self.user_id == 0:
@@ -200,6 +199,7 @@ class Tapper:
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
+                self.debug(f'login text {await resp.text()}')
                 resp_json = await resp.json()
 
                 return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
@@ -212,7 +212,7 @@ class Tapper:
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
-
+                self.debug(f'login text {await resp.text()}')
                 resp_json = await resp.json()
 
                 if resp_json.get("message") == "rpc error: code = AlreadyExists desc = Username is not available":
@@ -227,7 +227,7 @@ class Tapper:
                         resp = await http_client.post(
                             "https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
                             json=json_data, ssl=False)
-
+                        self.debug(f'login text {await resp.text()}')
                         resp_json = await resp.json()
 
                         if resp_json.get("token"):
@@ -241,7 +241,7 @@ class Tapper:
                                                           "/PROVIDER_TELEGRAM_MINI_APP",
                                                           json=json_data, ssl=False)
                             resp_json = await resp.json()
-
+                            self.debug(f'login text {await resp.text()}')
                             return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                         else:
@@ -254,6 +254,7 @@ class Tapper:
                     resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
+                    self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
 
                     return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
@@ -479,24 +480,12 @@ class Tapper:
         if proxy:
             await self.check_proxy(http_client=http_client, proxy=proxy)
 
-        tg_web_data = await self.get_tg_web_data(proxy=proxy)
-        tg_web_data_parts = tg_web_data.split('&')
-        user_data = tg_web_data_parts[0].split('=')[1]
-        chat_instance = tg_web_data_parts[1].split('=')[1]
-        chat_type = tg_web_data_parts[2].split('=')[1]
-        start_param = tg_web_data_parts[3].split('=')[1]
-        auth_date = tg_web_data_parts[4].split('=')[1]
-        hash_value = tg_web_data_parts[5].split('=')[1]
-
-        user_data_encoded = quote(user_data)
-
-        init_data = (f"user={user_data_encoded}&chat_instance={chat_instance}"
-                     f"&chat_type={chat_type}&start_param={start_param}&auth_date={auth_date}&hash={hash_value}")
-
         #print(init_data)
 
         while True:
             try:
+                init_data = await self.get_tg_web_data(proxy=proxy)
+
                 access_token, refresh_token = await self.login(http_client=http_client, initdata=init_data)
 
                 http_client.headers["Authorization"] = f"Bearer {access_token}"
