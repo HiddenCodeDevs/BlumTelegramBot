@@ -199,7 +199,7 @@ class Tapper:
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
-                self.debug(f'login text {await resp.text()}')
+                # self.debug(f'login text {await resp.text()}')
                 resp_json = await resp.json()
 
                 return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
@@ -212,7 +212,7 @@ class Tapper:
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
-                self.debug(f'login text {await resp.text()}')
+                # self.debug(f'login text {await resp.text()}')
                 resp_json = await resp.json()
 
                 if resp_json.get("message") == "rpc error: code = AlreadyExists desc = Username is not available":
@@ -227,7 +227,7 @@ class Tapper:
                         resp = await http_client.post(
                             "https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
                             json=json_data, ssl=False)
-                        self.debug(f'login text {await resp.text()}')
+                        # self.debug(f'login text {await resp.text()}')
                         resp_json = await resp.json()
 
                         if resp_json.get("token"):
@@ -241,7 +241,7 @@ class Tapper:
                                                           "/PROVIDER_TELEGRAM_MINI_APP",
                                                           json=json_data, ssl=False)
                             resp_json = await resp.json()
-                            self.debug(f'login text {await resp.text()}')
+                            # self.debug(f'login text {await resp.text()}')
                             return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                         else:
@@ -254,7 +254,7 @@ class Tapper:
                     resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
-                    self.debug(f'login text {await resp.text()}')
+                    # self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
 
                     return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
@@ -469,7 +469,6 @@ class Tapper:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Proxy: {proxy} | Error: {error}")
 
     async def run(self, proxy: str | None) -> None:
-        access_token_created_time = 0
         access_token = None
         refresh_token = None
 
@@ -488,71 +487,63 @@ class Tapper:
 
                 access_token, refresh_token = await self.login(http_client=http_client, initdata=init_data)
 
-                http_client.headers["Authorization"] = f"Bearer {access_token}"
+                http_client.headers["authorization"] = f"Bearer {access_token}"
 
-                if time() - access_token_created_time >= 3600:
-                    access_token, refresh_token = await self.refresh_token(http_client=http_client, token=access_token)
+                max_try = 2
 
-                    http_client.headers["authorization"] = f"Bearer {access_token}"
+                if self.first_run is not True:
+                    self.success("Logged in successfully")
+                    self.first_run = True
 
-                    access_token_created_time = time()
+                #print(access_token)
 
-                if access_token and time() - access_token_created_time < 3600:
-                    max_try = 2
+                msg = await self.claim_daily_reward(http_client=http_client)
+                if isinstance(msg, bool) and msg:
+                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed daily reward!")
 
-                    if self.first_run is not True:
-                        self.success("Logged in successfully")
-                        self.first_run = True
+                timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
 
-                    #print(access_token)
+                if isinstance(play_passes, int):
+                    self.info(f'You have {play_passes} play passes')
 
-                    msg = await self.claim_daily_reward(http_client=http_client)
-                    if isinstance(msg, bool) and msg:
-                        logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed daily reward!")
+                claim_amount, is_available = await self.friend_balance(http_client=http_client)
 
+                if claim_amount != 0 and is_available:
+                    amount = await self.friend_claim(http_client=http_client)
+                    self.success(f"Claimed friend ref reward {amount}")
+
+                if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
+                    await self.play_game(http_client=http_client, play_passes=play_passes)
+
+                #await asyncio.sleep(random.uniform(1, 3))
+
+                try:
                     timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
 
-                    if isinstance(play_passes, int):
-                        self.info(f'You have {play_passes} play passes')
+                    if start_time is None and end_time is None and max_try > 0:
+                        await self.start(http_client=http_client)
+                        self.info(f"<lc>[FARMING]</lc> Start farming!")
+                        await asyncio.sleep(1)
+                        max_try -= 1
 
-                    claim_amount, is_available = await self.friend_balance(http_client=http_client)
+                    elif (start_time is not None and end_time is not None and timestamp is not None and
+                          timestamp >= end_time and max_try > 0):
+                        timestamp, balance = await self.claim(http_client=http_client)
+                        self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
+                        await asyncio.sleep(1)
+                        max_try -= 1
 
-                    if claim_amount != 0 and is_available:
-                        amount = await self.friend_claim(http_client=http_client)
-                        self.success(f"Claimed friend ref reward {amount}")
+                    elif end_time is not None and timestamp is not None:
+                        sleep_duration = end_time - timestamp
+                        self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
+                        max_try += 1
+                        await asyncio.sleep(sleep_duration)
 
-                    if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
-                        await self.play_game(http_client=http_client, play_passes=play_passes)
+                    elif max_try == 0:
+                        break
 
-                    #await asyncio.sleep(random.uniform(1, 3))
-
-                    try:
-                        timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
-
-                        if start_time is None and end_time is None and max_try > 0:
-                            await self.start(http_client=http_client)
-                            self.info(f"<lc>[FARMING]</lc> Start farming!")
-                            await asyncio.sleep(1)
-                            max_try -= 1
-
-                        elif (start_time is not None and end_time is not None and timestamp is not None and
-                              timestamp >= end_time and max_try > 0):
-                            timestamp, balance = await self.claim(http_client=http_client)
-                            self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
-                            await asyncio.sleep(1)
-                            max_try -= 1
-
-                        elif end_time is not None and timestamp is not None:
-                            sleep_duration = end_time - timestamp
-                            self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
-                            max_try += 1
-                            await asyncio.sleep(sleep_duration)
-
-                        elif max_try == 0:
-                            break
-
-                    except Exception as e:
-                        self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
+                except Exception as e:
+                    self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
 
             except InvalidSession as error:
                 raise error
