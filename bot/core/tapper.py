@@ -135,19 +135,6 @@ class Tapper:
                 except (Unauthorized, UserDeactivated, AuthKeyUnregistered):
                     raise InvalidSession(self.session_name)
 
-            while True:
-                try:
-                    if self.peer is None:
-                        self.peer = await self.tg_client.resolve_peer('BlumCryptoBot')
-                    break
-                except FloodWait as fl:
-                    fls = fl.value
-
-                    logger.warning(f"<light-yellow>{self.session_name}</light-yellow> | FloodWait {fl}")
-                    logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Sleep {fls}s")
-
-                    await asyncio.sleep(fls + 3)
-
             if settings.REF_ID == '':
                 self.start_param = 'ref_QwD3tLsY8f'
             else:
@@ -156,7 +143,7 @@ class Tapper:
             InputBotApp = types.InputBotAppShortName(bot_id=self.peer, short_name="app")
 
             web_view = await self.tg_client.invoke(RequestAppWebView(
-                peer=self.peer,
+                peer=await self.tg_client.resolve_peer('BlumCryptoBot'),
                 app=InputBotApp,
                 platform='android',
                 write_allowed=True,
@@ -199,7 +186,7 @@ class Tapper:
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
-                # self.debug(f'login text {await resp.text()}')
+                self.debug(f'login text {await resp.text()}')
                 resp_json = await resp.json()
 
                 return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
@@ -212,7 +199,7 @@ class Tapper:
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
-                # self.debug(f'login text {await resp.text()}')
+                self.debug(f'login text {await resp.text()}')
                 resp_json = await resp.json()
 
                 if resp_json.get("message") == "rpc error: code = AlreadyExists desc = Username is not available":
@@ -227,7 +214,7 @@ class Tapper:
                         resp = await http_client.post(
                             "https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
                             json=json_data, ssl=False)
-                        # self.debug(f'login text {await resp.text()}')
+                        self.debug(f'login text {await resp.text()}')
                         resp_json = await resp.json()
 
                         if resp_json.get("token"):
@@ -241,7 +228,7 @@ class Tapper:
                                                           "/PROVIDER_TELEGRAM_MINI_APP",
                                                           json=json_data, ssl=False)
                             resp_json = await resp.json()
-                            # self.debug(f'login text {await resp.text()}')
+                            self.debug(f'login text {await resp.text()}')
                             return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                         else:
@@ -254,7 +241,7 @@ class Tapper:
                     resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
-                    # self.debug(f'login text {await resp.text()}')
+                    self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
 
                     return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
@@ -471,6 +458,7 @@ class Tapper:
     async def run(self, proxy: str | None) -> None:
         access_token = None
         refresh_token = None
+        login_need = True
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
 
@@ -483,17 +471,18 @@ class Tapper:
 
         while True:
             try:
-                init_data = await self.get_tg_web_data(proxy=proxy)
+                if login_need:
+                    init_data = await self.get_tg_web_data(proxy=proxy)
 
-                access_token, refresh_token = await self.login(http_client=http_client, initdata=init_data)
+                    access_token, refresh_token = await self.login(http_client=http_client, initdata=init_data)
 
-                http_client.headers["authorization"] = f"Bearer {access_token}"
+                    http_client.headers["Authorization"] = f"Bearer {access_token}"
 
-                if self.first_run is not True:
-                    self.success("Logged in successfully")
-                    self.first_run = True
+                    if self.first_run is not True:
+                        self.success("Logged in successfully")
+                        self.first_run = True
 
-                #print(access_token)
+                    login_need = False
 
                 msg = await self.claim_daily_reward(http_client=http_client)
                 if isinstance(msg, bool) and msg:
@@ -518,13 +507,13 @@ class Tapper:
                 try:
                     timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
 
-                    if start_time is None and end_time is None and max_try > 0:
+                    if start_time is None and end_time is None:
                         await self.start(http_client=http_client)
                         self.info(f"<lc>[FARMING]</lc> Start farming!")
                         await asyncio.sleep(1)
 
                     elif (start_time is not None and end_time is not None and timestamp is not None and
-                          timestamp >= end_time and max_try > 0):
+                          timestamp >= end_time):
                         timestamp, balance = await self.claim(http_client=http_client)
                         self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
                         await asyncio.sleep(1)
@@ -532,6 +521,7 @@ class Tapper:
                     elif end_time is not None and timestamp is not None:
                         sleep_duration = end_time - timestamp
                         self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
+                        login_need=True
                         await asyncio.sleep(sleep_duration)
 
                 except Exception as e:
