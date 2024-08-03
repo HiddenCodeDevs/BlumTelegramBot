@@ -141,9 +141,10 @@ class Tapper:
                 self.start_param = settings.REF_ID
 
             InputBotApp = types.InputBotAppShortName(bot_id=self.peer, short_name="app")
+            peer = await self.tg_client.resolve_peer('BlumCryptoBot')
 
             web_view = await self.tg_client.invoke(RequestAppWebView(
-                peer=await self.tg_client.resolve_peer('BlumCryptoBot'),
+                peer=peer,
                 app=InputBotApp,
                 platform='android',
                 write_allowed=True,
