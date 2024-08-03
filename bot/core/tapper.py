@@ -132,7 +132,6 @@ class Tapper:
                 with_tg = False
                 try:
                     await self.tg_client.connect()
-                    peer = await self.tg_client.resolve_peer('BlumCryptoBot')
                 except (Unauthorized, UserDeactivated, AuthKeyUnregistered):
                     raise InvalidSession(self.session_name)
 
@@ -141,7 +140,8 @@ class Tapper:
             else:
                 self.start_param = settings.REF_ID
 
-            InputBotApp = types.InputBotAppShortName(bot_id=self.peer, short_name="app")
+            peer = await self.tg_client.resolve_peer('BlumCryptoBot')
+            InputBotApp = types.InputBotAppShortName(bot_id=peer, short_name="app")
 
             web_view = await self.tg_client.invoke(RequestAppWebView(
                 peer=peer,
@@ -152,7 +152,7 @@ class Tapper:
             ))
 
             auth_url = web_view.url
-            #print(auth_url)
+            print(auth_url)
             tg_web_data = unquote(
                 string=auth_url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0])
 
