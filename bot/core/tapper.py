@@ -473,6 +473,9 @@ class Tapper:
         while True:
             try:
                 if login_need:
+                    if "Authorization" in http_client.headers:
+                        del http_client.headers["Authorization"]
+
                     init_data = await self.get_tg_web_data(proxy=proxy)
 
                     access_token, refresh_token = await self.login(http_client=http_client, initdata=init_data)
