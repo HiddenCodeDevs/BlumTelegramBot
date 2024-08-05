@@ -152,7 +152,7 @@ class Tapper:
             ))
 
             auth_url = web_view.url
-            print(auth_url)
+            #print(auth_url)
             tg_web_data = unquote(
                 string=auth_url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0])
 
@@ -187,7 +187,7 @@ class Tapper:
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
-                self.debug(f'login text {await resp.text()}')
+                #self.debug(f'login text {await resp.text()}')
                 resp_json = await resp.json()
 
                 return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
@@ -200,7 +200,7 @@ class Tapper:
                 resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                               json=json_data, ssl=False)
-                self.debug(f'login text {await resp.text()}')
+                #self.debug(f'login text {await resp.text()}')
                 resp_json = await resp.json()
 
                 if resp_json.get("message") == "rpc error: code = AlreadyExists desc = Username is not available":
@@ -215,7 +215,7 @@ class Tapper:
                         resp = await http_client.post(
                             "https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
                             json=json_data, ssl=False)
-                        self.debug(f'login text {await resp.text()}')
+                        #self.debug(f'login text {await resp.text()}')
                         resp_json = await resp.json()
 
                         if resp_json.get("token"):
@@ -229,7 +229,7 @@ class Tapper:
                                                           "/PROVIDER_TELEGRAM_MINI_APP",
                                                           json=json_data, ssl=False)
                             resp_json = await resp.json()
-                            self.debug(f'login text {await resp.text()}')
+                            #self.debug(f'login text {await resp.text()}')
                             return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                         else:
@@ -242,7 +242,7 @@ class Tapper:
                     resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
-                    self.debug(f'login text {await resp.text()}')
+                    #self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
 
                     return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
@@ -262,7 +262,7 @@ class Tapper:
                                           ssl=False)
             resp_json = await resp.json()
 
-            logger.debug(f"{self.session_name} | claim_task response: {resp_json}")
+            #logger.debug(f"{self.session_name} | claim_task response: {resp_json}")
 
             return resp_json.get('status') == "CLAIMED"
         except Exception as error:
@@ -274,7 +274,7 @@ class Tapper:
                                           ssl=False)
             resp_json = await resp.json()
 
-            logger.debug(f"{self.session_name} | start_complete_task response: {resp_json}")
+            #logger.debug(f"{self.session_name} | start_complete_task response: {resp_json}")
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Start complete error {error}")
 
@@ -283,7 +283,7 @@ class Tapper:
             resp = await http_client.get('https://game-domain.blum.codes/api/v1/tasks', ssl=False)
             resp_json = await resp.json()
 
-            logger.debug(f"{self.session_name} | get_tasks response: {resp_json}")
+            #logger.debug(f"{self.session_name} | get_tasks response: {resp_json}")
 
             if isinstance(resp_json, list):
                 return resp_json
@@ -525,7 +525,7 @@ class Tapper:
                     elif end_time is not None and timestamp is not None:
                         sleep_duration = end_time - timestamp
                         self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
-                        login_need=True
+                        login_need = True
                         await asyncio.sleep(sleep_duration)
 
                 except Exception as e:
