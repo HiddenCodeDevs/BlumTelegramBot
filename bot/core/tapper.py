@@ -262,9 +262,9 @@ class Tapper:
                                           ssl=False)
             resp_json = await resp.json()
 
-            logger.debug(f"{self.session_name} | claim_task response: {resp_json}")
+            #logger.debug(f"{self.session_name} | claim_task response: {resp_json}")
 
-            return resp_json.get('status') == "CLAIMED"
+            return resp_json.get('status') == "FINISHED"
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Claim task error {error}")
 
