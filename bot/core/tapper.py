@@ -256,23 +256,24 @@ class Tapper:
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Login error {error}")
 
-    async def claim_task(self, http_client: aiohttp.ClientSession, task):
+    async def claim_task(self, http_client: aiohttp.ClientSession, task_id):
         try:
-            resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task["id"]}/claim',
+            resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task_id}/claim',
                                           ssl=False)
             resp_json = await resp.json()
 
             #logger.debug(f"{self.session_name} | claim_task response: {resp_json}")
 
-            return resp_json.get('status') == "CLAIMED"
+            return resp_json.get('status') == "FINISHED"
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Claim task error {error}")
 
-    async def start_complete_task(self, http_client: aiohttp.ClientSession, task):
+    async def start_task(self, http_client: aiohttp.ClientSession, task_id):
         try:
-            resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task["id"]}/start',
+            resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task_id}/start',
                                           ssl=False)
             resp_json = await resp.json()
+
 
             #logger.debug(f"{self.session_name} | start_complete_task response: {resp_json}")
         except Exception as error:
@@ -284,9 +285,10 @@ class Tapper:
             resp_json = await resp.json()
 
             #logger.debug(f"{self.session_name} | get_tasks response: {resp_json}")
+            tasks = [element for sublist in resp_json for element in sublist.get("tasks")]
 
             if isinstance(resp_json, list):
-                return resp_json
+                return tasks
             else:
                 logger.error(f"{self.session_name} | Unexpected response format in get_tasks: {resp_json}")
                 return []
@@ -505,6 +507,22 @@ class Tapper:
 
                 if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
                     await self.play_game(http_client=http_client, play_passes=play_passes)
+
+                tasks = await self.get_tasks(http_client=http_client)
+
+                for task in tasks:
+                    if task['status'] == "NOT_STARTED" and task['type'] != "PROGRESS_TARGET":
+                        await self.start_task(http_client=http_client, task_id=task["id"])
+                        await asyncio.sleep(random.uniform(3, 5))
+
+                tasks = await self.get_tasks(http_client=http_client)
+                for task in tasks:
+                    if task['status'] == "READY_FOR_CLAIM":
+                        status = await self.claim_task(http_client=http_client, task_id=task["id"])
+                        if status:
+                            logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task!")
+                        await asyncio.sleep(random.uniform(3, 5))
+
 
                 #await asyncio.sleep(random.uniform(1, 3))
 
