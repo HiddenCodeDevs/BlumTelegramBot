@@ -256,6 +256,14 @@ class Tapper:
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Login error {error}")
 
+    async def join_tribe(self, http_client: aiohttp.ClientSession):
+        try:
+            resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tribe/de974358-fa96-4954-a23a-4a326c0d1336/join',
+                                          ssl=False)
+            text = await resp.text()
+            return text == 'OK'
+        except Exception as error:
+            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Join tribe {error}")
     async def claim_task(self, http_client: aiohttp.ClientSession, task_id):
         try:
             resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task_id}/claim',
@@ -508,6 +516,9 @@ class Tapper:
                 if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
                     await self.play_game(http_client=http_client, play_passes=play_passes)
 
+                joined_tribe = await self.join_tribe(http_client=http_client)
+                if joined_tribe:
+                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Joined tribe")
                 tasks = await self.get_tasks(http_client=http_client)
 
                 for task in tasks:
