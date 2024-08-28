@@ -255,6 +255,7 @@ class Tapper:
 
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Login error {error}")
+            return None, None
 
     async def claim_task(self, http_client: aiohttp.ClientSession, task_id):
         try:
@@ -273,9 +274,7 @@ class Tapper:
             resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task_id}/start',
                                           ssl=False)
             resp_json = await resp.json()
-
-
-            #logger.debug(f"{self.session_name} | start_complete_task response: {resp_json}")
+            
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Start complete error {error}")
 
@@ -294,6 +293,7 @@ class Tapper:
                 return []
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Get tasks error {error}")
+            return []
 
     async def play_game(self, http_client: aiohttp.ClientSession, play_passes):
         try:
@@ -446,7 +446,6 @@ class Tapper:
         json_data = {'refresh': token}
         resp = await http_client.post("https://gateway.blum.codes/v1/auth/refresh", json=json_data, ssl=False)
         resp_json = await resp.json()
-        #print(f'refresh {resp_json}')
 
         return resp_json.get('access'), resp_json.get('refresh')
 
