@@ -181,77 +181,108 @@ class Tapper:
 
     async def login(self, http_client: aiohttp.ClientSession, initdata):
         try:
-            if settings.USE_REF is False:
-
-                json_data = {"query": initdata}
-                resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
-                                              "/PROVIDER_TELEGRAM_MINI_APP",
-                                              json=json_data, ssl=False)
-                #self.debug(f'login text {await resp.text()}')
-                resp_json = await resp.json()
-
-                return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
-            else:
-
-                json_data = {"query": initdata, "username": self.username,
-                             "referralToken": self.start_param.split('_')[1]}
-
-                resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
-                                              "/PROVIDER_TELEGRAM_MINI_APP",
-                                              json=json_data, ssl=False)
-                #self.debug(f'login text {await resp.text()}')
-                resp_json = await resp.json()
-
-                if resp_json.get("message") == "rpc error: code = AlreadyExists desc = Username is not available":
-                    while True:
-                        name = self.username
-                        rand_letters = ''.join(random.choices(string.ascii_lowercase, k=random.randint(3, 8)))
-                        new_name = name + rand_letters
-
-                        json_data = {"query": initdata, "username": new_name,
-                                     "referralToken": self.start_param.split('_')[1]}
-
-                        resp = await http_client.post(
-                            "https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
-                            json=json_data, ssl=False)
-                        #self.debug(f'login text {await resp.text()}')
-                        resp_json = await resp.json()
-
-                        if resp_json.get("token"):
-                            self.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
-                            return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
-                        elif resp_json.get("message") == 'account is already connected to another user':
-
-                            json_data = {"query": initdata}
-                            resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
-                                                          "/PROVIDER_TELEGRAM_MINI_APP",
-                                                          json=json_data, ssl=False)
-                            resp_json = await resp.json()
-                            #self.debug(f'login text {await resp.text()}')
-                            return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
-                        else:
-                            self.info(f'Username taken, retrying register with new name')
-                            await asyncio.sleep(1)
-
-                elif resp_json.get("message") == 'account is already connected to another user':
+            await http_client.options(url='https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP')
+            while True:
+                if settings.USE_REF is False:
 
                     json_data = {"query": initdata}
                     resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
+                    if resp.status == 520:
+                        self.warning('Relogin')
+                        await asyncio.sleep(delay=5)
+                        continue
+                    else:
+                        pass
                     #self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
 
                     return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
-                elif resp_json.get("token"):
+                else:
 
-                    self.success(f'Registered using ref - {self.start_param} and nickname - {self.username}')
-                    return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
+                    json_data = {"query": initdata, "username": self.username,
+                                 "referralToken": self.start_param.split('_')[1]}
 
+                    resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
+                                                  "/PROVIDER_TELEGRAM_MINI_APP",
+                                                  json=json_data, ssl=False)
+                    if resp.status == 520:
+                        self.warning('Relogin')
+                        await asyncio.sleep(delay=5)
+                        continue
+                    else:
+                        pass
+                    #self.debug(f'login text {await resp.text()}')
+                    resp_json = await resp.json()
+
+                    if resp_json.get("message") == "rpc error: code = AlreadyExists desc = Username is not available":
+                        while True:
+                            name = self.username
+                            rand_letters = ''.join(random.choices(string.ascii_lowercase, k=random.randint(3, 8)))
+                            new_name = name + rand_letters
+
+                            json_data = {"query": initdata, "username": new_name,
+                                         "referralToken": self.start_param.split('_')[1]}
+
+                            resp = await http_client.post(
+                                "https://gateway.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
+                                json=json_data, ssl=False)
+                            if resp.status == 520:
+                                self.warning('Relogin')
+                                await asyncio.sleep(delay=5)
+                                continue
+                            else:
+                                pass
+                            #self.debug(f'login text {await resp.text()}')
+                            resp_json = await resp.json()
+
+                            if resp_json.get("token"):
+                                self.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
+                                return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
+
+                            elif resp_json.get("message") == 'account is already connected to another user':
+
+                                json_data = {"query": initdata}
+                                resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
+                                                              "/PROVIDER_TELEGRAM_MINI_APP",
+                                                              json=json_data, ssl=False)
+                                if resp.status == 520:
+                                    self.warning('Relogin')
+                                    await asyncio.sleep(delay=5)
+                                    continue
+                                else:
+                                    pass
+                                resp_json = await resp.json()
+                                #self.debug(f'login text {await resp.text()}')
+                                return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
+
+                            else:
+                                self.info(f'Username taken, retrying register with new name')
+                                await asyncio.sleep(1)
+
+                    elif resp_json.get("message") == 'account is already connected to another user':
+
+                        json_data = {"query": initdata}
+                        resp = await http_client.post("https://gateway.blum.codes/v1/auth/provider"
+                                                      "/PROVIDER_TELEGRAM_MINI_APP",
+                                                      json=json_data, ssl=False)
+                        if resp.status == 520:
+                            self.warning('Relogin')
+                            await asyncio.sleep(delay=5)
+                            continue
+                        else:
+                            pass
+                        #self.debug(f'login text {await resp.text()}')
+                        resp_json = await resp.json()
+
+                        return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
+
+                    elif resp_json.get("token"):
+
+                        self.success(f'Registered using ref - {self.start_param} and nickname - {self.username}')
+                        return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Login error {error}")
