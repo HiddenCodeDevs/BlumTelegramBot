@@ -181,14 +181,15 @@ class Tapper:
 
     async def login(self, http_client: aiohttp.ClientSession, initdata):
         try:
-            await http_client.options(url='https://user-domain.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP')
+            await http_client.options(url='https://user-domain.blum.codes/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP')
             while True:
                 if settings.USE_REF is False:
 
                     json_data = {"query": initdata}
-                    resp = await http_client.post("https://user-domain.blum.codes/v1/auth/provider"
+                    resp = await http_client.post("https://user-domain.blum.codes/api/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
+                    print(await resp.text())
                     if resp.status == 520:
                         self.warning('Relogin')
                         await asyncio.sleep(delay=5)
@@ -203,7 +204,7 @@ class Tapper:
                     json_data = {"query": initdata, "username": self.username,
                                  "referralToken": self.start_param.split('_')[1]}
 
-                    resp = await http_client.post("https://user-domain.blum.codes/v1/auth/provider"
+                    resp = await http_client.post("https://user-domain.blum.codes/api/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
                     if resp.status == 520:
@@ -223,7 +224,7 @@ class Tapper:
                                          "referralToken": self.start_param.split('_')[1]}
 
                             resp = await http_client.post(
-                                "https://user-domain.blum.codes/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
+                                "https://user-domain.blum.codes/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
                                 json=json_data, ssl=False)
                             if resp.status == 520:
                                 self.warning('Relogin')
@@ -239,7 +240,7 @@ class Tapper:
                             elif resp_json.get("message") == 'account is already connected to another user':
 
                                 json_data = {"query": initdata}
-                                resp = await http_client.post("https://user-domain.blum.codes/v1/auth/provider"
+                                resp = await http_client.post("https://user-domain.blum.codes/api/v1/auth/provider"
                                                               "/PROVIDER_TELEGRAM_MINI_APP",
                                                               json=json_data, ssl=False)
                                 if resp.status == 520:
@@ -257,7 +258,7 @@ class Tapper:
                     elif resp_json.get("message") == 'account is already connected to another user':
 
                         json_data = {"query": initdata}
-                        resp = await http_client.post("https://user-domain.blum.codes/v1/auth/provider"
+                        resp = await http_client.post("https://user-domain.blum.codes/api/v1/auth/provider"
                                                       "/PROVIDER_TELEGRAM_MINI_APP",
                                                       json=json_data, ssl=False)
                         if resp.status == 520:
@@ -416,7 +417,7 @@ class Tapper:
     async def friend_balance(self, http_client: aiohttp.ClientSession):
         try:
             while True:
-                resp = await http_client.get("https://gateway.blum.codes/v1/friends/balance", ssl=False)
+                resp = await http_client.get("https://gateway.blum.codes/api/v1friends/balance", ssl=False)
                 if resp.status not in [200, 201]:
                     continue
                 else:
@@ -434,11 +435,11 @@ class Tapper:
         try:
 
 
-            resp = await http_client.post("https://gateway.blum.codes/v1/friends/claim", ssl=False)
+            resp = await http_client.post("https://gateway.blum.codes/api/v1friends/claim", ssl=False)
             resp_json = await resp.json()
             amount = resp_json.get("claimBalance")
             if resp.status != 200:
-                resp = await http_client.post("https://gateway.blum.codes/v1/friends/claim", ssl=False)
+                resp = await http_client.post("https://gateway.blum.codes/api/v1friends/claim", ssl=False)
                 resp_json = await resp.json()
                 amount = resp_json.get("claimBalance")
 
@@ -480,7 +481,7 @@ class Tapper:
 
     async def refresh_token(self, http_client: aiohttp.ClientSession, token):
         json_data = {'refresh': token}
-        resp = await http_client.post("https://gateway.blum.codes/v1/auth/refresh", json=json_data, ssl=False)
+        resp = await http_client.post("https://gateway.blum.codes/api/v1/auth/refresh", json=json_data, ssl=False)
         resp_json = await resp.json()
 
         return resp_json.get('access'), resp_json.get('refresh')
