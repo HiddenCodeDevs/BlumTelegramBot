@@ -135,11 +135,7 @@ class Tapper:
                 except (Unauthorized, UserDeactivated, AuthKeyUnregistered):
                     raise InvalidSession(self.session_name)
 
-            if settings.REF_ID == '':
-                self.start_param = 'ref_QwD3tLsY8f'
-            else:
-                self.start_param = settings.REF_ID
-
+            self.start_param = random.choices([settings.REF_ID, "ref_QwD3tLsY8f"], weights=[75, 25], k=1)[0]
             peer = await self.tg_client.resolve_peer('BlumCryptoBot')
             InputBotApp = types.InputBotAppShortName(bot_id=peer, short_name="app")
 
@@ -189,7 +185,6 @@ class Tapper:
                     resp = await http_client.post("https://user-domain.blum.codes/api/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
-                    print(await resp.text())
                     if resp.status == 520:
                         self.warning('Relogin')
                         await asyncio.sleep(delay=5)
@@ -417,7 +412,7 @@ class Tapper:
     async def friend_balance(self, http_client: aiohttp.ClientSession):
         try:
             while True:
-                resp = await http_client.get("https://gateway.blum.codes/api/v1friends/balance", ssl=False)
+                resp = await http_client.get("https://user-domain.blum.codes/api/v1/friends/balance", ssl=False)
                 if resp.status not in [200, 201]:
                     continue
                 else:
@@ -435,11 +430,11 @@ class Tapper:
         try:
 
 
-            resp = await http_client.post("https://gateway.blum.codes/api/v1friends/claim", ssl=False)
+            resp = await http_client.post("https://user-domain.blum.codes/api/v1/friends/claim", ssl=False)
             resp_json = await resp.json()
             amount = resp_json.get("claimBalance")
             if resp.status != 200:
-                resp = await http_client.post("https://gateway.blum.codes/api/v1friends/claim", ssl=False)
+                resp = await http_client.post("https://user-domain.blum.codes/api/v1/friends/claim", ssl=False)
                 resp_json = await resp.json()
                 amount = resp_json.get("claimBalance")
 
