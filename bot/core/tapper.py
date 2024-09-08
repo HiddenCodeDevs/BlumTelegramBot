@@ -280,7 +280,7 @@ class Tapper:
                                           ssl=False)
             resp_json = await resp.json()
 
-            #logger.debug(f"{self.session_name} | claim_task response: {resp_json}")
+            # logger.debug(f"{self.session_name} | claim_task response: {resp_json}")
 
             return resp_json.get('status') == "FINISHED"
         except Exception as error:
@@ -291,7 +291,7 @@ class Tapper:
             resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task_id}/start',
                                           ssl=False)
             resp_json = await resp.json()
-            
+
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Start complete error {error}")
 
@@ -315,8 +315,8 @@ class Tapper:
                     break
             resp_json = await resp.json()
 
-            #logger.debug(f"{self.session_name} | get_tasks response: {resp_json}")
-            tasks = [element for sublist in resp_json for element in sublist.get("tasks")]
+            # logger.debug(f"{self.session_name} | get_tasks response: {resp_json}")
+            tasks = [element for sublist in resp_json for element in sublist.get("subSections")]
 
             if isinstance(resp_json, list):
                 return tasks
@@ -543,20 +543,21 @@ class Tapper:
 
                 tasks = await self.get_tasks(http_client=http_client)
 
-                for task in tasks:
-                    if task.get('status'):
-                        if task['status'] == "NOT_STARTED" and task['type'] != "PROGRESS_TARGET":
+                for section in tasks:
+                    for task in section['tasks']:
+                        if task.get('status') == "NOT_STARTED" and task.get('type') != "PROGRESS_TARGET":
                             await self.start_task(http_client=http_client, task_id=task["id"])
                             await asyncio.sleep(random.uniform(3, 5))
 
                 tasks = await self.get_tasks(http_client=http_client)
-                for task in tasks:
-                    if task.get('status'):
-                        if task['status'] == "READY_FOR_CLAIM":
-                            status = await self.claim_task(http_client=http_client, task_id=task["id"])
-                            if status:
-                                logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task!")
-                            await asyncio.sleep(random.uniform(3, 5))
+                for section in tasks:
+                    for task in section['tasks']:
+                        if task.get('status'):
+                            if task['status'] == "READY_FOR_CLAIM":
+                                status = await self.claim_task(http_client=http_client, task_id=task["id"])
+                                if status:
+                                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task!")
+                                await asyncio.sleep(random.uniform(3, 5))
 
 
                 #await asyncio.sleep(random.uniform(1, 3))
