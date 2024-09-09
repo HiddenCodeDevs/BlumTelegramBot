@@ -326,8 +326,9 @@ class Tapper:
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Get tasks error {error}")
 
-    async def play_game(self, http_client: aiohttp.ClientSession, play_passes):
+    async def play_game(self, http_client: aiohttp.ClientSession, play_passes, refresh_token):
         try:
+            total_games = 0
             tries = 3
             while play_passes:
                 game_id = await self.start_game(http_client=http_client)
@@ -338,9 +339,25 @@ class Tapper:
                     tries -= 1
                     if tries == 0:
                         self.warning('No more trying, gonna skip games')
+                        break
                     continue
                 else:
-                    self.success("Started playing game")
+                    if total_games != 25:
+                        total_games += 1
+                        self.success("Started playing game")
+                    else:
+                        self.info("Getting new token to play games")
+                        while True:
+                            (access_token,
+                             refresh_token) = await self.refresh_token(http_client=http_client, token=refresh_token)
+                            if access_token:
+                                http_client.headers["Authorization"] = f"Bearer {access_token}"
+                                self.success('Got new token')
+                                total_games = 0
+                                break
+                            else:
+                                self.error('Can`t get new token, trying again')
+                                continue
 
                 await asyncio.sleep(random.uniform(30, 40))
 
@@ -537,7 +554,7 @@ class Tapper:
                     self.success(f"Claimed friend ref reward {amount}")
 
                 if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
-                    await self.play_game(http_client=http_client, play_passes=play_passes)
+                    await self.play_game(http_client=http_client, play_passes=play_passes, refresh_token=refresh_token)
 
                 await self.join_tribe(http_client=http_client)
 
