@@ -187,7 +187,7 @@ class Tapper:
                                                   json=json_data, ssl=False)
                     if resp.status == 520:
                         self.warning('Relogin')
-                        await asyncio.sleep(delay=5)
+                        await asyncio.sleep(delay=3)
                         continue
                     #self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
@@ -204,7 +204,7 @@ class Tapper:
                                                   json=json_data, ssl=False)
                     if resp.status == 520:
                         self.warning('Relogin')
-                        await asyncio.sleep(delay=5)
+                        await asyncio.sleep(delay=3)
                         continue
                     #self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
@@ -223,7 +223,7 @@ class Tapper:
                                 json=json_data, ssl=False)
                             if resp.status == 520:
                                 self.warning('Relogin')
-                                await asyncio.sleep(delay=5)
+                                await asyncio.sleep(delay=3)
                                 continue
                             #self.debug(f'login text {await resp.text()}')
                             resp_json = await resp.json()
@@ -240,7 +240,7 @@ class Tapper:
                                                               json=json_data, ssl=False)
                                 if resp.status == 520:
                                     self.warning('Relogin')
-                                    await asyncio.sleep(delay=5)
+                                    await asyncio.sleep(delay=3)
                                     continue
                                 resp_json = await resp.json()
                                 #self.debug(f'login text {await resp.text()}')
@@ -258,7 +258,7 @@ class Tapper:
                                                       json=json_data, ssl=False)
                         if resp.status == 520:
                             self.warning('Relogin')
-                            await asyncio.sleep(delay=5)
+                            await asyncio.sleep(delay=3)
                             continue
                         #self.debug(f'login text {await resp.text()}')
                         resp_json = await resp.json()
@@ -290,7 +290,6 @@ class Tapper:
         try:
             resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task_id}/start',
                                           ssl=False)
-            resp_json = await resp.json()
 
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Start complete error {error}")
@@ -370,12 +369,11 @@ class Tapper:
                                 f" msg: {msg} play_passes: {play_passes}")
                     break
 
-                await asyncio.sleep(random.uniform(30, 40))
+                await asyncio.sleep(random.uniform(1, 5))
 
                 play_passes -= 1
         except Exception as e:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Error occurred during play game: {e}")
-            await asyncio.sleep(random.randint(0, 5))
 
     async def start_game(self, http_client: aiohttp.ClientSession):
         try:
@@ -492,8 +490,10 @@ class Tapper:
             self.error(f"Error occurred during claim daily reward: {e}")
 
     async def refresh_token(self, http_client: aiohttp.ClientSession, token):
+        if "Authorization" in http_client.headers:
+            del http_client.headers["Authorization"]
         json_data = {'refresh': token}
-        resp = await http_client.post("https://gateway.blum.codes/api/v1/auth/refresh", json=json_data, ssl=False)
+        resp = await http_client.post("https://user-domain.blum.codes/api/v1/auth/refresh", json=json_data, ssl=False)
         resp_json = await resp.json()
 
         return resp_json.get('access'), resp_json.get('refresh')
@@ -585,13 +585,11 @@ class Tapper:
                     if start_time is None and end_time is None:
                         await self.start(http_client=http_client)
                         self.info(f"<lc>[FARMING]</lc> Start farming!")
-                        await asyncio.sleep(1)
 
                     elif (start_time is not None and end_time is not None and timestamp is not None and
                           timestamp >= end_time):
                         timestamp, balance = await self.claim(http_client=http_client)
                         self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
-                        await asyncio.sleep(1)
 
                     elif end_time is not None and timestamp is not None:
                         sleep_duration = end_time - timestamp
