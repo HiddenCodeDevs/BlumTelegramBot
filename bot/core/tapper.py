@@ -280,8 +280,6 @@ class Tapper:
                                           ssl=False)
             resp_json = await resp.json()
 
-            # logger.debug(f"{self.session_name} | claim_task response: {resp_json}")
-
             return resp_json.get('status') == "FINISHED"
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Claim task error {error}")
@@ -293,6 +291,28 @@ class Tapper:
 
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Start complete error {error}")
+
+    async def validate_task(self, http_client: aiohttp.ClientSession, task_id, title):
+        try:
+            keywords = {
+                'How to Analyze Crypto?': 'VALUE'
+            }
+
+            payload = {'keyword': keywords.get(title)}
+
+            resp = await http_client.post(f'https://game-domain.blum.codes/api/v1/tasks/{task_id}/validate',
+                                          json=payload, ssl=False)
+            resp_json = await resp.json()
+            if resp_json.get('status') == "READY_FOR_CLAIM":
+                self.success(f'Validated task - {title}')
+                status = await self.claim_task(http_client, task_id)
+                if status:
+                    return status
+            else:
+                return False
+
+        except Exception as error:
+            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Claim task error {error}")
 
     async def join_tribe(self, http_client: aiohttp.ClientSession):
         try:
@@ -573,8 +593,16 @@ class Tapper:
                             if task['status'] == "READY_FOR_CLAIM":
                                 status = await self.claim_task(http_client=http_client, task_id=task["id"])
                                 if status:
-                                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task!")
+                                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
+                                                   f"'{task['title']}'")
                                 await asyncio.sleep(random.uniform(3, 5))
+                            elif task['status'] == "READY_FOR_VERIFY" and task['validationType'] == 'KEYWORD':
+                                status = await self.validate_task(http_client=http_client, task_id=task["id"],
+                                                                  title=task['title'])
+
+                                if status:
+                                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
+                                                   f"'{task['title']}'")
 
 
                 #await asyncio.sleep(random.uniform(1, 3))
