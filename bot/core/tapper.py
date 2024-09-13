@@ -566,16 +566,16 @@ class Tapper:
                         self.success("Logged in successfully")
                         self.first_run = True
 
+                    timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
+
+                    if isinstance(play_passes, int):
+                        self.info(f'You have {play_passes} play passes')
+
                     login_need = False
 
                 msg = await self.claim_daily_reward(http_client=http_client)
                 if isinstance(msg, bool) and msg:
                     logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed daily reward!")
-
-                timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
-
-                if isinstance(play_passes, int):
-                    self.info(f'You have {play_passes} play passes')
 
                 claim_amount, is_available = await self.friend_balance(http_client=http_client)
 
