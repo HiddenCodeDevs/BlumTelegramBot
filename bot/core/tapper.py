@@ -433,7 +433,7 @@ class Tapper:
     async def claim(self, http_client: aiohttp.ClientSession):
         try:
             while True:
-                resp = await http_client.get(f"{self.game_url}/api/v1/farming/claim", ssl=False)
+                resp = await http_client.post(f"{self.game_url}/api/v1/farming/claim", ssl=False)
                 if resp.status not in [200, 201]:
                     continue
                 else:
