@@ -302,7 +302,9 @@ class Tapper:
     async def validate_task(self, http_client: aiohttp.ClientSession, task_id, title):
         try:
             keywords = {
-                'How to Analyze Crypto?': 'VALUE'
+                'How to Analyze Crypto?': 'VALUE',
+                'Forks Explained': 'GO GET',
+                'Secure your Crypto!': 'BEST PROJECT EVER',
             }
 
             payload = {'keyword': keywords.get(title)}
