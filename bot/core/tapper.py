@@ -512,7 +512,7 @@ class Tapper:
 
     async def claim_daily_reward(self, http_client: aiohttp.ClientSession):
         try:
-            resp = await http_client.post(f"{self.game_url}/api/v1/daily-reward?offset=-180",
+            resp = await http_client.post(f"{self.game_url}/api/v1/daily-reward?offset=-210",
                                           ssl=False)
             txt = await resp.text()
             return True if txt == 'OK' else txt
