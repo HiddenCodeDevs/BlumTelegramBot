@@ -372,7 +372,7 @@ class Tapper:
 
             all_tasks = collect_tasks(resp_json)
 
-            logger.debug(f"{self.session_name} | Collected {len(all_tasks)} tasks")
+            #logger.debug(f"{self.session_name} | Collected {len(all_tasks)} tasks")
 
             return all_tasks
         except Exception as error:
