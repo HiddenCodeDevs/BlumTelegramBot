@@ -563,7 +563,7 @@ class Tapper:
     async def run(self, proxy: str | None) -> None:
         if settings.USE_RANDOM_DELAY_IN_RUN:
             random_delay = random.randint(settings.RANDOM_DELAY_IN_RUN[0], settings.RANDOM_DELAY_IN_RUN[1])
-            logger.info(f"{self.session_name} | Bot will start in <y>{random_delay}s</y>")
+            logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Bot will start in <ly>{random_delay}s</ly>")
             await asyncio.sleep(random_delay)
 
         access_token = None
@@ -619,7 +619,7 @@ class Tapper:
 
                 for task in tasks:
                     if task.get('status') == "NOT_STARTED" and task.get('type') != "PROGRESS_TARGET":
-                        self.info(f'Started doing task - {task["title"]}')
+                        self.info(f"Started doing task - '{task['title']}'")
                         await self.start_task(http_client=http_client, task_id=task["id"])
                         await asyncio.sleep(0.5)
 
