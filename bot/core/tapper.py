@@ -313,7 +313,6 @@ class Tapper:
                                           json=payload, ssl=False)
             resp_json = await resp.json()
             if resp_json.get('status') == "READY_FOR_CLAIM":
-                self.success(f'Validated task - {title}')
                 status = await self.claim_task(http_client, task_id)
                 if status:
                     return status
@@ -343,16 +342,42 @@ class Tapper:
                     break
             resp_json = await resp.json()
 
-            # logger.debug(f"{self.session_name} | get_tasks response: {resp_json}")
-            tasks = [element for sublist in resp_json for element in sublist.get("subSections")]
+            def collect_tasks(resp_json):
+                collected_tasks = []
+                for task in resp_json:
+                    if task.get('title') == 'Weekly':  # Ищем задачу с заголовком 'Weekly' и открываем её
+                        tasks_list = task.get('tasks', [])  # Открываем параметр Tasks
+                        for t in tasks_list:  # Проходимся по внутренностям tasks
+                            sub_tasks = t.get('subTasks', [])  # Ищем во внутренностях subtasks
+                            for sub_task in sub_tasks:  # проходимся по сабтаскам
+                                # print(sub_task)
+                                collected_tasks.append(sub_task)
 
-            if isinstance(resp_json, list):
-                return tasks
-            else:
-                logger.error(f"{self.session_name} | Unexpected response format in get_tasks: {resp_json}")
-                return []
+                    if task.get('title') == 'Promo':
+                        tasks_list = task.get('tasks', [])
+                        for t in tasks_list:
+                            sub_tasks = t.get('subTasks', [])
+                            for sub_task in sub_tasks:
+                                # print(sub_task)
+                                collected_tasks.append(sub_task)
+
+                    if not task.get('tasks'):
+                        sub_tasks = task.get('subSections', [])
+                        for sub_task in sub_tasks:
+                            tasks = sub_task.get('tasks', [])
+                            for task_basic in tasks:
+                                collected_tasks.append(task_basic)
+
+                return collected_tasks
+
+            all_tasks = collect_tasks(resp_json)
+
+            #logger.debug(f"{self.session_name} | Collected {len(all_tasks)} tasks")
+
+            return all_tasks
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Get tasks error {error}")
+            return []
 
     async def play_game(self, http_client: aiohttp.ClientSession, play_passes, refresh_token):
         try:
@@ -476,7 +501,6 @@ class Tapper:
     async def friend_claim(self, http_client: aiohttp.ClientSession):
         try:
 
-
             resp = await http_client.post(f"{self.user_url}/api/v1/friends/claim", ssl=False)
             resp_json = await resp.json()
             amount = resp_json.get("claimBalance")
@@ -484,8 +508,6 @@ class Tapper:
                 resp = await http_client.post(f"{self.user_url}/api/v1/friends/claim", ssl=False)
                 resp_json = await resp.json()
                 amount = resp_json.get("claimBalance")
-
-
 
             return amount
         except Exception as e:
@@ -539,6 +561,11 @@ class Tapper:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Proxy: {proxy} | Error: {error}")
 
     async def run(self, proxy: str | None) -> None:
+        if settings.USE_RANDOM_DELAY_IN_RUN:
+            random_delay = random.randint(settings.RANDOM_DELAY_IN_RUN[0], settings.RANDOM_DELAY_IN_RUN[1])
+            logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Bot will start in <ly>{random_delay}s</ly>")
+            await asyncio.sleep(random_delay)
+
         access_token = None
         refresh_token = None
         login_need = True
@@ -549,8 +576,6 @@ class Tapper:
 
         if proxy:
             await self.check_proxy(http_client=http_client, proxy=proxy)
-
-        #print(init_data)
 
         while True:
             try:
@@ -568,12 +593,12 @@ class Tapper:
                         self.success("Logged in successfully")
                         self.first_run = True
 
-                    timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
-
-                    if isinstance(play_passes, int):
-                        self.info(f'You have {play_passes} play passes')
-
                     login_need = False
+
+                timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
+
+                if isinstance(play_passes, int):
+                    self.info(f'You have {play_passes} play passes')
 
                 msg = await self.claim_daily_reward(http_client=http_client)
                 if isinstance(msg, bool) and msg:
@@ -592,30 +617,31 @@ class Tapper:
 
                 tasks = await self.get_tasks(http_client=http_client)
 
-                for section in tasks:
-                    for task in section['tasks']:
-                        if task.get('status') == "NOT_STARTED" and task.get('type') != "PROGRESS_TARGET":
-                            await self.start_task(http_client=http_client, task_id=task["id"])
-                            await asyncio.sleep(random.uniform(3, 5))
+                for task in tasks:
+                    if task.get('status') == "NOT_STARTED" and task.get('type') != "PROGRESS_TARGET":
+                        self.info(f"Started doing task - '{task['title']}'")
+                        await self.start_task(http_client=http_client, task_id=task["id"])
+                        await asyncio.sleep(0.5)
+
+                await asyncio.sleep(5)
 
                 tasks = await self.get_tasks(http_client=http_client)
-                for section in tasks:
-                    for task in section['tasks']:
-                        if task.get('status'):
-                            if task['status'] == "READY_FOR_CLAIM":
-                                status = await self.claim_task(http_client=http_client, task_id=task["id"])
-                                if status:
-                                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
-                                                   f"'{task['title']}'")
-                                await asyncio.sleep(random.uniform(3, 5))
-                            elif task['status'] == "READY_FOR_VERIFY" and task['validationType'] == 'KEYWORD':
-                                status = await self.validate_task(http_client=http_client, task_id=task["id"],
-                                                                  title=task['title'])
+                for task in tasks:
+                    if task.get('status'):
+                        if task['status'] == "READY_FOR_CLAIM" and task['type'] != 'PROGRESS_TASK':
+                            status = await self.claim_task(http_client=http_client, task_id=task["id"])
+                            if status:
+                                logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
+                                               f"'{task['title']}'")
+                            await asyncio.sleep(0.5)
+                        elif task['status'] == "READY_FOR_VERIFY" and task['validationType'] == 'KEYWORD':
+                            status = await self.validate_task(http_client=http_client, task_id=task["id"],
+                                                              title=task['title'])
 
-                                if status:
-                                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
-                                                   f"'{task['title']}'")
-
+                            if status:
+                                logger.success(
+                                    f"<light-yellow>{self.session_name}</light-yellow> | Validated task - "
+                                    f"'{task['title']}'")
 
                 #await asyncio.sleep(random.uniform(1, 3))
 

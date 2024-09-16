@@ -171,3 +171,7 @@ sessions/
 user_agents.json
 
 *.json
+
+proxies.txt
+
+proxy.txt
