@@ -345,15 +345,12 @@ class Tapper:
             def collect_tasks(resp_json):
                 collected_tasks = []
                 for task in resp_json:
-                    if task.get('title') == 'Weekly':  # Ищем задачу с заголовком 'Weekly' и открываем её
-                        tasks_list = task.get('tasks', [])  # Открываем параметр Tasks
-                        for t in tasks_list:  # Проходимся по внутренностям tasks
-                            sub_tasks = t.get('subTasks', [])  # Ищем во внутренностях subtasks
-                            for sub_task in sub_tasks:  # проходимся по сабтаскам
-                                # print(sub_task)
-                                collected_tasks.append(sub_task)
+                    if task.get('sectionType') == 'HIGHLIGHTS':
+                        tasks_list = task.get('tasks', [])
+                        for t in tasks_list:
+                            collected_tasks.append(t)
 
-                    if task.get('title') == 'Promo':
+                    if task.get('sectionType') == 'WEEKLY_ROUTINE':
                         tasks_list = task.get('tasks', [])
                         for t in tasks_list:
                             sub_tasks = t.get('subTasks', [])
@@ -361,7 +358,7 @@ class Tapper:
                                 # print(sub_task)
                                 collected_tasks.append(sub_task)
 
-                    if not task.get('tasks'):
+                    if task.get('sectionType') == "DEFAULT":
                         sub_tasks = task.get('subSections', [])
                         for sub_task in sub_tasks:
                             tasks = sub_task.get('tasks', [])
