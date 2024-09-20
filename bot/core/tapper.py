@@ -305,7 +305,8 @@ class Tapper:
                 'How to Analyze Crypto?': 'VALUE',
                 'Forks Explained': 'GO GET',
                 'Secure your Crypto!': 'BEST PROJECT EVER',
-                'Navigating Crypto': 'HEYBLUM'
+                'Navigating Crypto': 'HEYBLUM',
+                'What are Telegram Mini Apps?': 'CRYPTOBLUM'
             }
 
             payload = {'keyword': keywords.get(title)}
