@@ -372,7 +372,7 @@ class Tapper:
                             tasks = sub_task.get('tasks', [])
                             for task_basic in tasks:
                                 collected_tasks.append(task_basic)
-                print(collected_tasks)
+
                 return collected_tasks
 
             all_tasks = collect_tasks(resp_json)
