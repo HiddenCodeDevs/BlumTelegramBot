@@ -306,7 +306,8 @@ class Tapper:
                 'Forks Explained': 'GO GET',
                 'Secure your Crypto!': 'BEST PROJECT EVER',
                 'Navigating Crypto': 'HEYBLUM',
-                'What are Telegram Mini Apps?': 'CRYPTOBLUM'
+                'What are Telegram Mini Apps?': 'CRYPTOBLUM',
+                'Say No to Rug Pull!': 'SUPERBLUM'
             }
 
             payload = {'keyword': keywords.get(title)}
@@ -371,7 +372,7 @@ class Tapper:
                             tasks = sub_task.get('tasks', [])
                             for task_basic in tasks:
                                 collected_tasks.append(task_basic)
-
+                print(collected_tasks)
                 return collected_tasks
 
             all_tasks = collect_tasks(resp_json)
