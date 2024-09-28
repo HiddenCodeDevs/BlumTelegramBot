@@ -216,7 +216,7 @@ class Tapper:
                     #self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
 
-                    if resp_json.get("message") == "rpc error: code = AlreadyExists desc = Username is not available":
+                    if resp_json.get("message") == "Username is not available":
                         while True:
                             name = self.username
                             rand_letters = ''.join(random.choices(string.ascii_lowercase, k=random.randint(3, 8)))
@@ -307,7 +307,10 @@ class Tapper:
                 'Secure your Crypto!': 'BEST PROJECT EVER',
                 'Navigating Crypto': 'HEYBLUM',
                 'What are Telegram Mini Apps?': 'CRYPTOBLUM',
-                'Say No to Rug Pull!': 'SUPERBLUM'
+                'Say No to Rug Pull!': 'SUPERBLUM',
+                'What Are AMMs?': 'CRYPTOSMART',
+                'Liquidity Pools Guide': 'BLUMERSSS',
+                '$2.5M+ DOGS Airdrop': 'HAPPYDOGS'
             }
 
             payload = {'keyword': keywords.get(title)}
