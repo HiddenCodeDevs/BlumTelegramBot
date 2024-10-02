@@ -343,7 +343,7 @@ class Tapper:
             while True:
                 resp = await http_client.get(f'{self.earn_domain}/api/v1/tasks', ssl=False)
                 if resp.status not in [200, 201]:
-                    continue
+                    return None
                 else:
                     break
             resp_json = await resp.json()
@@ -470,7 +470,7 @@ class Tapper:
             while True:
                 resp = await http_client.post(f"{self.game_url}/api/v1/farming/claim", ssl=False)
                 if resp.status not in [200, 201]:
-                    continue
+                    return None, None
                 else:
                     break
 
@@ -494,7 +494,7 @@ class Tapper:
             while True:
                 resp = await http_client.get(f"{self.user_url}/api/v1/friends/balance", ssl=False)
                 if resp.status not in [200, 201]:
-                    continue
+                    return 0, False
                 else:
                     break
             resp_json = await resp.json()
