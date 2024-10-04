@@ -310,7 +310,10 @@ class Tapper:
                 'Say No to Rug Pull!': 'SUPERBLUM',
                 'What Are AMMs?': 'CRYPTOSMART',
                 'Liquidity Pools Guide': 'BLUMERSSS',
-                '$2.5M+ DOGS Airdrop': 'HAPPYDOGS'
+                '$2.5M+ DOGS Airdrop': 'HAPPYDOGS',
+                "Doxxing? What's that?": 'NODOXXING',
+                "Pre-Market Trading?": 'WOWBLUM',
+                'How to Memecoin?': 'MEMEBLUM'
             }
 
             payload = {'keyword': keywords.get(title)}
