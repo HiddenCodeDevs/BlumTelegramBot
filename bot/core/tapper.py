@@ -187,7 +187,7 @@ class Tapper:
             return tg_web_data
 
         except (Unauthorized, UserDeactivated, AuthKeyUnregistered, UserDeactivatedBan, AuthKeyDuplicated,
-                SessionExpired, SessionRevoked):
+                SessionExpired, SessionRevoked) as e:
             if self.tg_client.is_connected:
                 await self.tg_client.disconnect()
             session_file = f"sessions/{self.session_name}.session"
@@ -195,8 +195,8 @@ class Tapper:
             if os.path.exists(session_file):
                 os.makedirs("deleted_sessions", exist_ok=True)
                 shutil.move(session_file, f"deleted_sessions/{bad_session_file}")
-                self.critical(f"Session {self.session_name} is not working, moving to 'deleted sessions' folder")
-            return None
+                self.critical(f"Session {self.session_name} is not working, moving to 'deleted sessions' folder, {e}")
+                await asyncio.sleep(99999999)
 
         except InvalidSession as error:
             raise error
@@ -605,7 +605,6 @@ class Tapper:
             logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Bot will start in <ly>{random_delay}s</ly>")
             await asyncio.sleep(random_delay)
 
-        access_token = None
         refresh_token = None
         login_need = True
 
@@ -624,10 +623,9 @@ class Tapper:
 
                     init_data = await self.get_tg_web_data(proxy=proxy)
                     if init_data:
-
                         access_token, refresh_token = await self.login(http_client=http_client, initdata=init_data)
-
-                        http_client.headers["Authorization"] = f"Bearer {access_token}"
+                        if access_token and refresh_token:
+                            http_client.headers["Authorization"] = f"Bearer {access_token}"
 
                         if self.first_run is not True:
                             self.success("Logged in successfully")
