@@ -26,6 +26,8 @@
 |    **API_ID / API_HASH**    |   Platform data from which to run the Telegram session (default - android)   |
 |       **PLAY_GAMES**        |              Play games or just start farming (default is True)              |
 |         **POINTS**          |        Points per game (default is [190, 230] ((That is, 190 to 230)         |
+|       **AUTO_TASKS**        |                      Do tasks or not (default is True)                       |
+|     **TRIBE_CHAT_TAG**      |                    Your tribe telegram tag for auto join                     |
 | **USE_RANDOM_DELAY_IN_RUN** |                              Name saying itself                              |
 |   **RANDOM_DELAY_IN_RUN**   |               Random seconds delay for ^^^ (default is [5, 30]               |
 |         **USE_REF**         |         Register accounts with ur referral or not (default - False)          |
