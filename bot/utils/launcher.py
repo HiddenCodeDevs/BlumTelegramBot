@@ -24,6 +24,8 @@ Select an action:
 
     1. Run clicker
     2. Create session
+    
+WARNING!!! GAMES NOT WORKING YET, PLEASE DO NOT REPORT THEM!
 """
 
 global tg_clients

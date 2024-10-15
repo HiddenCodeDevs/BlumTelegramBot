@@ -338,8 +338,11 @@ class Tapper:
                 "Doxxing? What's that?": 'NODOXXING',
                 "Pre-Market Trading?": 'WOWBLUM',
                 'How to Memecoin?': 'MEMEBLUM',
+                'Bitcoin Ranbow Chart': 'SOBLUM',
+                'Crypto Terms Part 1': 'BLUMEXPLORER',
                 'Token Burning: How \u0026 Why?': 'ONFIRE',
-                'Play track \u0026 type track name': 'blum - big city life'
+                'Play track \u0026 type track name': 'blum - big city life',
+                'How to trade Perps?': 'CRYPTOFAN'
             }
 
             payload = {'keyword': keywords.get(title)}
@@ -359,11 +362,19 @@ class Tapper:
 
     async def join_tribe(self, http_client: aiohttp.ClientSession):
         try:
-            resp = await http_client.post(f'{self.tribe_url}/api/v1/tribe/510c4987-ff99-4bd4-9e74-29ba9bce8220/join',
-                                          ssl=False)
+            await http_client.post(f'{self.tribe_url}/api/v1/tribe/leave', json={}, ssl=False)
+
+            chat_name = settings.TRIBE_CHAT_TAG
+            info_resp = await http_client.get(f'{self.tribe_url}/api/v1/tribe/by-chatname/{chat_name}', ssl=False)
+            info = await info_resp.json()
+
+            tribe_id = info.get('id')
+            tribe_name = info.get('title')
+
+            resp = await http_client.post(f'{self.tribe_url}/api/v1/tribe/{tribe_id}/join', ssl=False)
             text = await resp.text()
             if text == 'OK':
-                self.success(f'Joined tribe')
+                self.success(f'Joined to tribe {tribe_name}')
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Join tribe {error}")
 
@@ -491,6 +502,7 @@ class Tapper:
                                               ssl=False)
 
             txt = await resp.text()
+            print(txt)
 
             return True if txt == 'OK' else txt, points
         except Exception as e:
@@ -647,38 +659,39 @@ class Tapper:
                     amount = await self.friend_claim(http_client=http_client)
                     self.success(f"Claimed friend ref reward {amount}")
 
-                if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
-                    await self.play_game(http_client=http_client, play_passes=play_passes, refresh_token=refresh_token)
+                #if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
+                #    await self.play_game(http_client=http_client, play_passes=play_passes, refresh_token=refresh_token)
 
                 await self.join_tribe(http_client=http_client)
 
-                tasks = await self.get_tasks(http_client=http_client)
+                if settings.AUTO_TASKS:
+                    tasks = await self.get_tasks(http_client=http_client)
 
-                for task in tasks:
-                    if task.get('status') == "NOT_STARTED" and task.get('type') != "PROGRESS_TARGET":
-                        self.info(f"Started doing task - '{task['title']}'")
-                        await self.start_task(http_client=http_client, task_id=task["id"])
-                        await asyncio.sleep(0.5)
-
-                await asyncio.sleep(5)
-
-                tasks = await self.get_tasks(http_client=http_client)
-                for task in tasks:
-                    if task.get('status'):
-                        if task['status'] == "READY_FOR_CLAIM" and task['type'] != 'PROGRESS_TASK':
-                            status = await self.claim_task(http_client=http_client, task_id=task["id"])
-                            if status:
-                                logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
-                                               f"'{task['title']}'")
+                    for task in tasks:
+                        if task.get('status') == "NOT_STARTED" and task.get('type') != "PROGRESS_TARGET":
+                            self.info(f"Started doing task - '{task['title']}'")
+                            await self.start_task(http_client=http_client, task_id=task["id"])
                             await asyncio.sleep(0.5)
-                        elif task['status'] == "READY_FOR_VERIFY" and task['validationType'] == 'KEYWORD':
-                            status = await self.validate_task(http_client=http_client, task_id=task["id"],
-                                                              title=task['title'])
 
-                            if status:
-                                logger.success(
-                                    f"<light-yellow>{self.session_name}</light-yellow> | Validated task - "
-                                    f"'{task['title']}'")
+                    await asyncio.sleep(5)
+
+                    tasks = await self.get_tasks(http_client=http_client)
+                    for task in tasks:
+                        if task.get('status'):
+                            if task['status'] == "READY_FOR_CLAIM" and task['type'] != 'PROGRESS_TASK':
+                                status = await self.claim_task(http_client=http_client, task_id=task["id"])
+                                if status:
+                                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
+                                                   f"'{task['title']}'")
+                                await asyncio.sleep(0.5)
+                            elif task['status'] == "READY_FOR_VERIFY" and task['validationType'] == 'KEYWORD':
+                                status = await self.validate_task(http_client=http_client, task_id=task["id"],
+                                                                  title=task['title'])
+
+                                if status:
+                                    logger.success(
+                                        f"<light-yellow>{self.session_name}</light-yellow> | Validated task - "
+                                        f"'{task['title']}'")
 
                 #await asyncio.sleep(random.uniform(1, 3))
 
