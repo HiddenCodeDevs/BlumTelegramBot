@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     RANDOM_DELAY_IN_RUN: list[int] = [5, 30]
 
     USE_REF: bool = False
-    REF_ID: str = ''
+    REF_ID: str = 'ref_Ct5CmN1L2W'
 
     TRIBE_CHAT_TAG: str = 'hidden_coding'
 
