@@ -33,3 +33,4 @@ websockets==12.0
 win32-setctime==1.1.0
 yarl==1.9.4
 zope.interface==6.4.post2
+requests
