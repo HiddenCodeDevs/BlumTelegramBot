@@ -352,8 +352,6 @@ class Tapper:
 
     async def join_tribe(self, http_client: aiohttp.ClientSession):
         try:
-            await http_client.post(f'{self.tribe_url}/api/v1/tribe/leave', json={}, ssl=False)
-
             chat_name = settings.TRIBE_CHAT_TAG
             info_resp = await http_client.get(f'{self.tribe_url}/api/v1/tribe/by-chatname/{chat_name}', ssl=False)
             info = await info_resp.json()
@@ -361,10 +359,17 @@ class Tapper:
             tribe_id = info.get('id')
             tribe_name = info.get('title')
 
-            resp = await http_client.post(f'{self.tribe_url}/api/v1/tribe/{tribe_id}/join', ssl=False)
-            text = await resp.text()
-            if text == 'OK':
-                self.success(f'Joined to tribe {tribe_name}')
+            my_tribe_inf = await http_client.get('https://tribe-domain.blum.codes/api/v1/tribe/my', ssl=False)
+            my_tribe = await my_tribe_inf.json()
+            my_tribe_id = my_tribe.get('id', None)
+
+            if my_tribe_id != tribe_id or not my_tribe_id:
+                await http_client.post(f'{self.tribe_url}/api/v1/tribe/leave', json={}, ssl=False)
+
+                resp = await http_client.post(f'{self.tribe_url}/api/v1/tribe/{tribe_id}/join', ssl=False)
+                text = await resp.text()
+                if text == 'OK':
+                    self.success(f'Joined to tribe {tribe_name}')
         except Exception as error:
             logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Join tribe {error}")
 
@@ -497,7 +502,7 @@ class Tapper:
                 return eligible
 
         except Exception as e:
-            self.error(f"Failed join tribe, error: {e}")
+            self.error(f"Failed elif dogs, error: {e}")
         return None
 
     async def get_data_payload(self):
