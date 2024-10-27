@@ -505,18 +505,18 @@ class Tapper:
             self.error(f"Failed elif dogs, error: {e}")
         return None
 
-    async def get_data_payload(self):
-        url = 'https://raw.githubusercontent.com/zuydd/database/main/blum.json'
-        data = requests.get(url=url)
-        return data.json()
+    # async def get_data_payload(self):
+    #     url = 'https://raw.githubusercontent.com/zuydd/database/main/blum.json'
+    #     data = requests.get(url=url)
+    #     return data.json()
 
     async def create_payload(self, http_client: aiohttp.ClientSession, game_id, points, dogs):
-        data = await self.get_data_payload()
-        payload_server = data.get('payloadServer', [])
-        filtered_data = [item for item in payload_server if item['status'] == 1]
-        random_id = random.choice([item['id'] for item in filtered_data])
-        resp = await http_client.post(f'https://{random_id}.vercel.app/api/blum', json={'game_id': game_id,
-                                                                                        'points': points,
+        # data = await self.get_data_payload()
+        # payload_server = data.get('payloadServer', [])
+        # filtered_data = [item for item in payload_server if item['status'] == 1]
+        # random_id = random.choice([item['id'] for item in filtered_data])
+        resp = await http_client.post(f'https://server2.ggtog.live/api/game', json={'gameId': game_id,
+                                                                                        'points': str(points),
                                                                                         'dogs': dogs
                                                                                         })
         if resp is not None:
@@ -524,7 +524,6 @@ class Tapper:
             if "payload" in data:
                 return data["payload"]
             return None
-
     async def claim_game(self, game_id: str, dogs, http_client: aiohttp.ClientSession):
         try:
             points = random.randint(settings.POINTS[0], settings.POINTS[1])
