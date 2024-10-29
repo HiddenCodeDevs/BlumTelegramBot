@@ -3,34 +3,49 @@ import os
 import random
 import shutil
 import string
-from time import time
-from urllib.parse import unquote, quote
+from urllib.parse import unquote
 
 import aiohttp
 import json
 
-import requests
 from aiocfscrape import CloudflareScraper
 from aiohttp_proxy import ProxyConnector
 from better_proxy import Proxy
 from pyrogram import Client
-from pyrogram.errors import (Unauthorized, UserDeactivated, AuthKeyUnregistered, FloodWait, UserDeactivatedBan,
+from pyrogram.errors import (Unauthorized, UserDeactivated, AuthKeyUnregistered, UserDeactivatedBan,
                              AuthKeyDuplicated, SessionExpired, SessionRevoked)
 from pyrogram.raw.functions.messages import RequestAppWebView
 from pyrogram.raw import types
-from .agents import generate_random_user_agent
+
+from bot.core.agents import generate_random_user_agent, get_user_agents
 from bot.config import settings
 
-from bot.utils import logger
 from bot.exceptions import InvalidSession
-from .headers import headers
-from .helper import format_duration
+from bot.core.api import BlumApi
+from bot.core.headers import headers
+from bot.core.helper import format_duration
+from bot.utils.payload import check_payload_server, get_payload
+from bot.utils.logger import logger, SessionLogger
+from bot.utils.checkers import check_proxy
+
 
 
 class Tapper:
+
+    _log: SessionLogger = None
+
+    user_url = "https://user-domain.blum.codes"
+    gateway_url = "https://gateway.blum.codes"
+    wallet_url = "https://wallet-domain.blum.codes"
+    subscription_url = "https://subscription.blum.codes"
+    tribe_url = "https://tribe-domain.blum.codes"
+
     def __init__(self, tg_client: Client):
-        self.session_name = tg_client.name
         self.tg_client = tg_client
+
+        self._log = SessionLogger(self.tg_client.name)
+        self._api = BlumApi(self._log)
+
         self.user_id = 0
         self.username = None
         self.first_name = None
@@ -39,82 +54,33 @@ class Tapper:
         self.start_param = None
         self.peer = None
         self.first_run = None
-        self.gateway_url = "https://gateway.blum.codes"
-        self.game_url = "https://game-domain.blum.codes"
-        self.wallet_url = "https://wallet-domain.blum.codes"
-        self.subscription_url = "https://subscription.blum.codes"
-        self.tribe_url = "https://tribe-domain.blum.codes"
-        self.user_url = "https://user-domain.blum.codes"
-        self.earn_domain = "https://earn-domain.blum.codes"
 
-        self.session_ug_dict = self.load_user_agents() or []
+        self.session_ug_dict = get_user_agents() or []
 
         headers['User-Agent'] = self.check_user_agent()
-
-    async def generate_random_user_agent(self):
-        return generate_random_user_agent(device_type='android', browser_type='chrome')
-
-    def info(self, message):
-        from bot.utils import info
-        info(f"<light-yellow>{self.session_name}</light-yellow> | {message}")
-
-    def debug(self, message):
-        from bot.utils import debug
-        debug(f"<light-yellow>{self.session_name}</light-yellow> | {message}")
-
-    def warning(self, message):
-        from bot.utils import warning
-        warning(f"<light-yellow>{self.session_name}</light-yellow> | {message}")
-
-    def error(self, message):
-        from bot.utils import error
-        error(f"<light-yellow>{self.session_name}</light-yellow> | {message}")
-
-    def critical(self, message):
-        from bot.utils import critical
-        critical(f"<light-yellow>{self.session_name}</light-yellow> | {message}")
-
-    def success(self, message):
-        from bot.utils import success
-        success(f"<light-yellow>{self.session_name}</light-yellow> | {message}")
 
     def save_user_agent(self):
         user_agents_file_name = "user_agents.json"
 
-        if not any(session['session_name'] == self.session_name for session in self.session_ug_dict):
+        if not any(session['session_name'] == self.tg_client.name for session in self.session_ug_dict):
             user_agent_str = generate_random_user_agent()
 
             self.session_ug_dict.append({
-                'session_name': self.session_name,
+                'session_name': self.tg_client.name,
                 'user_agent': user_agent_str})
 
             with open(user_agents_file_name, 'w') as user_agents:
                 json.dump(self.session_ug_dict, user_agents, indent=4)
 
-            logger.success(f"<light-yellow>{self.session_name}</light-yellow> | User agent saved successfully")
+            self._log.success(f"User agent saved successfully")
 
             return user_agent_str
 
-    def load_user_agents(self):
-        user_agents_file_name = "user_agents.json"
 
-        try:
-            with open(user_agents_file_name, 'r') as user_agents:
-                session_data = json.load(user_agents)
-                if isinstance(session_data, list):
-                    return session_data
-
-        except FileNotFoundError:
-            logger.warning("User agents file not found, creating...")
-
-        except json.JSONDecodeError:
-            logger.warning("User agents file is empty or corrupted.")
-
-        return []
 
     def check_user_agent(self):
         load = next(
-            (session['user_agent'] for session in self.session_ug_dict if session['session_name'] == self.session_name),
+            (session['user_agent'] for session in self.session_ug_dict if session['session_name'] == self.tg_client.name),
             None)
 
         if load is None:
@@ -148,12 +114,12 @@ class Tapper:
                         SessionExpired, SessionRevoked):
                     if self.tg_client.is_connected:
                         await self.tg_client.disconnect()
-                    session_file = f"sessions/{self.session_name}.session"
-                    bad_session_file = f"{self.session_name}.session"
+                    session_file = f"sessions/{self.tg_client.name}.session"
+                    bad_session_file = f"{self.tg_client.name}.session"
                     if os.path.exists(session_file):
                         os.makedirs("deleted_sessions", exist_ok=True)
                         shutil.move(session_file, f"deleted_sessions/{bad_session_file}")
-                        self.critical(f"Session {self.session_name} is deleted, moving to deleted sessions folder")
+                        self._log.critical(f"Session is deleted, moving to deleted sessions folder")
                     return None
 
             self.start_param = random.choices([settings.REF_ID, "ref_QwD3tLsY8f"], weights=[75, 25], k=1)[0]
@@ -192,51 +158,47 @@ class Tapper:
                 SessionExpired, SessionRevoked) as e:
             if self.tg_client.is_connected:
                 await self.tg_client.disconnect()
-            session_file = f"sessions/{self.session_name}.session"
-            bad_session_file = f"{self.session_name}.session"
+            session_file = f"sessions/{self.tg_client.name}.session"
+            bad_session_file = f"{self.tg_client.name}.session"
             if os.path.exists(session_file):
                 os.makedirs("deleted_sessions", exist_ok=True)
                 shutil.move(session_file, f"deleted_sessions/{bad_session_file}")
-                self.critical(f"Session {self.session_name} is not working, moving to 'deleted sessions' folder, {e}")
+                self._log.critical(f"Session is not working, moving to 'deleted sessions' folder, {e}")
                 await asyncio.sleep(99999999)
 
         except InvalidSession as error:
             raise error
 
         except Exception as error:
-            logger.error(
-                f"<light-yellow>{self.session_name}</light-yellow> | Unknown error during Authorization: {error}")
+            self._log.error(f"Unknown error during Authorization: {error}")
             await asyncio.sleep(delay=3)
 
-    async def login(self, http_client: aiohttp.ClientSession, initdata):
+    async def login(self, http_client: aiohttp.ClientSession, init_data):
         try:
             await http_client.options(url=f'{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP')
             while True:
                 if settings.USE_REF is False:
-
-                    json_data = {"query": initdata}
-                    resp = await http_client.post(f"{self.user_url}/api/v1/auth/provider"
-                                                  "/PROVIDER_TELEGRAM_MINI_APP",
-                                                  json=json_data, ssl=False)
+                    resp = await http_client.post(
+                        url=f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
+                        json={"query": init_data}, ssl=False
+                    )
                     if resp.status == 520:
-                        self.warning('Relogin')
+                        self._log.warning('Relogin')
                         await asyncio.sleep(delay=3)
                         continue
-                    #self.debug(f'login text {await resp.text()}')
                     resp_json = await resp.json()
 
                     return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                 else:
 
-                    json_data = {"query": initdata, "username": self.username,
-                                 "referralToken": self.start_param.split('_')[1]}
+                    json_data = {"query": init_data, "username": self.username, "referralToken": self.start_param.split('_')[1]}
 
                     resp = await http_client.post(f"{self.user_url}/api/v1/auth/provider"
                                                   "/PROVIDER_TELEGRAM_MINI_APP",
                                                   json=json_data, ssl=False)
                     if resp.status == 520:
-                        self.warning('Relogin')
+                        self._log.warning('Relogin')
                         await asyncio.sleep(delay=3)
                         continue
                     #self.debug(f'login text {await resp.text()}')
@@ -248,31 +210,30 @@ class Tapper:
                             rand_letters = ''.join(random.choices(string.ascii_lowercase, k=random.randint(3, 8)))
                             new_name = name + rand_letters
 
-                            json_data = {"query": initdata, "username": new_name,
+                            json_data = {"query": init_data, "username": new_name,
                                          "referralToken": self.start_param.split('_')[1]}
 
                             resp = await http_client.post(
                                 f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
                                 json=json_data, ssl=False)
                             if resp.status == 520:
-                                self.warning('Relogin')
+                                self._log.warning('Relogin')
                                 await asyncio.sleep(delay=3)
                                 continue
                             #self.debug(f'login text {await resp.text()}')
                             resp_json = await resp.json()
 
                             if resp_json.get("token"):
-                                self.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
+                                self._log.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
                                 return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                             elif resp_json.get("message") == 'account is already connected to another user':
 
-                                json_data = {"query": initdata}
                                 resp = await http_client.post(f"{self.user_url}/api/v1/auth/provider"
                                                               "/PROVIDER_TELEGRAM_MINI_APP",
-                                                              json=json_data, ssl=False)
+                                                              json={"query": init_data}, ssl=False)
                                 if resp.status == 520:
-                                    self.warning('Relogin')
+                                    self._log.warning('Relogin')
                                     await asyncio.sleep(delay=3)
                                     continue
                                 resp_json = await resp.json()
@@ -280,75 +241,57 @@ class Tapper:
                                 return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                             else:
-                                self.info(f'Username taken, retrying register with new name')
+                                self._log.info(f'Username taken, retrying register with new name')
                                 await asyncio.sleep(1)
 
                     elif resp_json.get("message") == 'account is already connected to another user':
 
-                        json_data = {"query": initdata}
+                        json_data = {"query": init_data}
                         resp = await http_client.post(f"{self.user_url}/api/v1/auth/provider"
                                                       "/PROVIDER_TELEGRAM_MINI_APP",
                                                       json=json_data, ssl=False)
                         if resp.status == 520:
-                            self.warning('Relogin')
+                            self._log.warning('Relogin')
                             await asyncio.sleep(delay=3)
                             continue
-                        #self.debug(f'login text {await resp.text()}')
                         resp_json = await resp.json()
 
                         return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                     elif resp_json.get("token"):
 
-                        self.success(f'Registered using ref - {self.start_param} and nickname - {self.username}')
+                        self._log.success(f'Registered using ref - {self.start_param} and nickname - {self.username}')
                         return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
         except Exception as error:
-            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Login error {error}")
+            self._log.error(f"Login error {error}")
             return None, None
 
-    async def claim_task(self, http_client: aiohttp.ClientSession, task_id):
-        try:
-            resp = await http_client.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/claim',
-                                          ssl=False)
-            resp_json = await resp.json()
 
-            return resp_json.get('status') == "FINISHED"
-        except Exception as error:
-            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Claim task error {error}")
 
-    async def start_task(self, http_client: aiohttp.ClientSession, task_id):
-        try:
-            resp = await http_client.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/start',
-                                          ssl=False)
 
-        except Exception as error:
-            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Start complete error {error}")
 
-    async def validate_task(self, http_client: aiohttp.ClientSession, task_id, title):
+    async def validate_task(self, http_client: aiohttp.ClientSession, task_id):
         try:
             url = 'https://raw.githubusercontent.com/zuydd/database/main/blum.json'
-            data = requests.get(url=url)
-            data_json = data.json()
+            request = await http_client.get(url=url)
+            blum_database = await request.json()
 
-            tasks = data_json.get('tasks')
+            tasks = blum_database.get('tasks')
 
             keyword = [item["answer"] for item in tasks if item['id'] == task_id]
 
-            payload = {'keyword': keyword}
 
-            resp = await http_client.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/validate',
-                                          json=payload, ssl=False)
-            resp_json = await resp.json()
-            if resp_json.get('status') == "READY_FOR_CLAIM":
-                status = await self.claim_task(http_client, task_id)
+            status = await self._api.validate_task(task_id, keyword.pop())
+            if status:
+                status = await self._api.claim_task(task_id)
                 if status:
                     return status
             else:
                 return False
 
         except Exception as error:
-            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Claim task error {error}")
+            self._log.error(f"Claim task error {error}")
 
     async def join_tribe(self, http_client: aiohttp.ClientSession):
         try:
@@ -369,265 +312,105 @@ class Tapper:
                 resp = await http_client.post(f'{self.tribe_url}/api/v1/tribe/{tribe_id}/join', ssl=False)
                 text = await resp.text()
                 if text == 'OK':
-                    self.success(f'Joined to tribe {tribe_name}')
+                    self._log.success(f'Joined to tribe {tribe_name}')
         except Exception as error:
-            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Join tribe {error}")
+            self._log.error(f"=Join tribe {error}")
 
-    async def get_tasks(self, http_client: aiohttp.ClientSession):
+
+    async def get_tasks(self):
         try:
-            while True:
-                resp = await http_client.get(f'{self.earn_domain}/api/v1/tasks', ssl=False)
-                if resp.status not in [200, 201]:
-                    return None
-                else:
-                    break
-            resp_json = await resp.json()
+            resp_json = await self._api.get_tasks()
 
-            def collect_tasks(resp_json):
-                collected_tasks = []
-                for task in resp_json:
-                    if task.get('sectionType') == 'HIGHLIGHTS':
-                        tasks_list = task.get('tasks', [])
-                        for t in tasks_list:
-                            sub_tasks = t.get('subTasks')
-                            if sub_tasks:
-                                for sub_task in sub_tasks:
-                                    collected_tasks.append(sub_task)
-                            if t.get('type') != 'PARTNER_INTEGRATION':
-                                collected_tasks.append(t)
-                            if t.get('type') == 'PARTNER_INTEGRATION' and t.get('reward'):
-                                collected_tasks.append(t)
-
-                    if task.get('sectionType') == 'WEEKLY_ROUTINE':
-                        tasks_list = task.get('tasks', [])
-                        for t in tasks_list:
-                            sub_tasks = t.get('subTasks', [])
+            collected_tasks = []
+            for task in resp_json:
+                if task.get('sectionType') == 'HIGHLIGHTS':
+                    tasks_list = task.get('tasks', [])
+                    for t in tasks_list:
+                        sub_tasks = t.get('subTasks')
+                        if sub_tasks:
                             for sub_task in sub_tasks:
-                                # print(sub_task)
                                 collected_tasks.append(sub_task)
+                        if t.get('type') != 'PARTNER_INTEGRATION':
+                            collected_tasks.append(t)
+                        if t.get('type') == 'PARTNER_INTEGRATION' and t.get('reward'):
+                            collected_tasks.append(t)
 
-                    if task.get('sectionType') == "DEFAULT":
-                        sub_tasks = task.get('subSections', [])
+                if task.get('sectionType') == 'WEEKLY_ROUTINE':
+                    tasks_list = task.get('tasks', [])
+                    for t in tasks_list:
+                        sub_tasks = t.get('subTasks', [])
                         for sub_task in sub_tasks:
-                            tasks = sub_task.get('tasks', [])
-                            for task_basic in tasks:
-                                collected_tasks.append(task_basic)
+                            # print(sub_task)
+                            collected_tasks.append(sub_task)
 
-                return collected_tasks
+                if task.get('sectionType') == "DEFAULT":
+                    sub_tasks = task.get('subSections', [])
+                    for sub_task in sub_tasks:
+                        tasks = sub_task.get('tasks', [])
+                        for task_basic in tasks:
+                            collected_tasks.append(task_basic)
 
-            all_tasks = collect_tasks(resp_json)
-
-            #logger.debug(f"{self.session_name} | Collected {len(all_tasks)} tasks")
-
-            return all_tasks
+            return collected_tasks
         except Exception as error:
-            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Get tasks error {error}")
+            self._log.error(f"Get tasks error {error}")
             return []
 
-    async def play_game(self, http_client: aiohttp.ClientSession, play_passes, refresh_token):
-        try:
-            total_games = 0
-            tries = 3
-            while play_passes:
-                game_id = await self.start_game(http_client=http_client)
+    async def update_auth(self, http_client, refresh_token):
+        access_token, refresh_token = await self.refresh_token(http_client=http_client, token=refresh_token)
+        if access_token:
+            http_client.headers["Authorization"] = f"Bearer {access_token}"
 
-                if not game_id or game_id == "cannot start game":
-                    logger.info(
-                        f"<light-yellow>{self.session_name.ljust(8)}</light-yellow> | Couldn't start play in game!"
-                        f" play_passes: {play_passes}, trying again")
-                    tries -= 1
-                    if tries == 0:
-                        self.warning('No more trying, gonna skip games')
-                        break
-                    continue
-                else:
-                    if total_games != 25:
-                        total_games += 1
-                        self.success("Started playing game")
-                    else:
-                        self.info("Getting new token to play games")
-                        while True:
-                            (access_token,
-                             refresh_token) = await self.refresh_token(http_client=http_client, token=refresh_token)
-                            if access_token:
-                                http_client.headers["Authorization"] = f"Bearer {access_token}"
-                                self.success('Got new token')
-                                total_games = 0
-                                break
-                            else:
-                                self.error('Can`t get new token, trying again')
-                                continue
+    async def play_game(self, play_passes):
 
-                await asyncio.sleep(random.uniform(30, 40))
+        if settings.USE_CUSTOM_PAYLOAD_SERVER:
+            self._log.warning(f"Payload server not used. Pass play games!")
 
-                data_elig = await self.elig_dogs(http_client=http_client)
-                if data_elig:
-                    dogs = random.randint(25, 30) * 5
-                    msg, points = await self.claim_game(game_id=game_id, http_client=http_client, dogs=dogs)
-                else:
-                    msg, points = await self.claim_game(game_id=game_id, http_client=http_client, dogs=0)
+        if not await check_payload_server(settings.CUSTOM_PAYLOAD_SERVER_URL):
+            self._log.error(f"Payload server not available, maybe offline. Url: {settings.CUSTOM_PAYLOAD_SERVER_URL}")
+            return
 
-                if isinstance(msg, bool) and msg:
-                    logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Finish play in game!"
-                                f" reward: {points}")
-                else:
-                    logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Couldn't play game,"
-                                f" msg: {msg} play_passes: {play_passes}")
-                    break
+        number_of_games = 25 if play_passes > 25 else play_passes
+        tries = 3
 
+        for _ in range(number_of_games):
+            try:
                 await asyncio.sleep(random.uniform(1, 5))
+                game_id = await self._api.start_game()
+                if not game_id:
+                    self._log.info(f"Couldn't start play in game! play_passes: {play_passes}, trying again")
+                if not game_id:
+                    tries -= 1
+                    if tries <= 0:
+                        return self._log.warning('No more trying, gonna skip games')
+                    continue
 
-                play_passes -= 1
-        except Exception as e:
-            logger.error(
-                f"<light-yellow>{self.session_name.ljust(8)}</light-yellow> | Error occurred during play game: {e}")
 
-    async def start_game(self, http_client: aiohttp.ClientSession):
-        try:
-            resp = await http_client.post(f"{self.game_url}/api/v2/game/play", ssl=False)
-            response_data = await resp.json()
-            if "gameId" in response_data:
-                return response_data.get("gameId")
-            elif "message" in response_data:
-                return response_data.get("message")
-        except Exception as e:
-            self.error(f"Error occurred during start game: {e}")
+                sleep_time = random.uniform(30, 40)
+                self._log.success(f"Started playing game ({game_id}). Sleep: {sleep_time}")
+                await asyncio.sleep(sleep_time)
 
-    async def elig_dogs(self, http_client: aiohttp.ClientSession):
-        try:
-            resp = await http_client.get('https://game-domain.blum.codes/api/v2/game/eligibility/dogs_drop')
-            if resp is not None:
-                data = await resp.json()
-                eligible = data.get('eligible', False)
-                return eligible
+                blum_points = random.randint(settings.POINTS[0], settings.POINTS[1])
+                # dogs = random.randint(25, 30) * 5 if await self._api.elig_dogs() else 0
 
-        except Exception as e:
-            self.error(f"Failed elif dogs, error: {e}")
-        return None
+                # data = await self.create_payload(http_client=http_client, game_id=game_id, points=points, dogs=dogs)
 
-    async def get_data_payload(self):
-        url = 'https://raw.githubusercontent.com/zuydd/database/main/blum.json'
-        data = requests.get(url=url)
-        return data.json()
+                payload = await get_payload(settings.CUSTOM_PAYLOAD_SERVER_URL, game_id, blum_points)
+                status = await self._api.claim_game(payload.get("payload"))
+                if status:
+                    play_passes -= 1
+                    self._log.info(f"Finish play in game! Reward: {blum_points}")
+            except Exception as e:
+                self._log.error(f"Error occurred during play game: {e}")
 
-    async def create_payload(self, http_client: aiohttp.ClientSession, game_id, points, dogs):
-        data = await self.get_data_payload()
-        payload_server = data.get('payloadServer', [])
-        filtered_data = [item for item in payload_server if item['status'] == 1]
-        random_id = random.choice([item['id'] for item in filtered_data])
-        resp = await http_client.post(f'https://{random_id}.vercel.app/api/blum', json={'game_id': game_id,
-                                                                                        'points': points,
-                                                                                        'dogs': dogs
-                                                                                        })
-        if resp is not None:
-            data = await resp.json()
-            if "payload" in data:
-                return data["payload"]
-            return None
 
-    async def claim_game(self, game_id: str, dogs, http_client: aiohttp.ClientSession):
-        try:
-            points = random.randint(settings.POINTS[0], settings.POINTS[1])
 
-            data = await self.create_payload(http_client=http_client, game_id=game_id, points=points, dogs=dogs)
 
-            resp = await http_client.post(f"{self.game_url}/api/v2/game/claim", json={'payload': data},
-                                          ssl=False)
-            if resp.status != 200:
-                resp = await http_client.post(f"{self.game_url}/api/v2/game/claim", json={'payload': data},
-                                              ssl=False)
 
-            txt = await resp.text()
 
-            return True if txt == 'OK' else txt, points
-        except Exception as e:
-            self.error(f"Error occurred during claim game: {e}")
 
-    async def claim(self, http_client: aiohttp.ClientSession):
-        try:
-            while True:
-                resp = await http_client.post(f"{self.game_url}/api/v1/farming/claim", ssl=False)
-                if resp.status not in [200, 201]:
-                    return None
-                else:
-                    break
 
-            resp_json = await resp.json()
 
-            return int(resp_json.get("timestamp") / 1000), resp_json.get("availableBalance")
-        except Exception as e:
-            self.error(f"Error occurred during claim: {e}")
 
-    async def start(self, http_client: aiohttp.ClientSession):
-        try:
-            resp = await http_client.post(f"{self.game_url}/api/v1/farming/start", ssl=False)
-
-            if resp.status != 200:
-                resp = await http_client.post(f"{self.game_url}/api/v1/farming/start", ssl=False)
-        except Exception as e:
-            self.error(f"Error occurred during start: {e}")
-
-    async def friend_balance(self, http_client: aiohttp.ClientSession):
-        try:
-            while True:
-                resp = await http_client.get(f"{self.user_url}/api/v1/friends/balance", ssl=False)
-                if resp.status not in [200, 201]:
-                    return 0, False
-                else:
-                    break
-            resp_json = await resp.json()
-            claim_amount = resp_json.get("amountForClaim")
-            is_available = resp_json.get("canClaim")
-
-            return (claim_amount,
-                    is_available)
-        except Exception as e:
-            self.error(f"Error occurred during friend balance: {e}")
-
-    async def friend_claim(self, http_client: aiohttp.ClientSession):
-        try:
-
-            resp = await http_client.post(f"{self.user_url}/api/v1/friends/claim", ssl=False)
-            resp_json = await resp.json()
-            amount = resp_json.get("claimBalance")
-            if resp.status != 200:
-                resp = await http_client.post(f"{self.user_url}/api/v1/friends/claim", ssl=False)
-                resp_json = await resp.json()
-                amount = resp_json.get("claimBalance")
-
-            return amount
-        except Exception as e:
-            self.error(f"Error occurred during friends claim: {e}")
-
-    async def balance(self, http_client: aiohttp.ClientSession):
-        try:
-            resp = await http_client.get(f"{self.game_url}/api/v1/user/balance", ssl=False)
-            resp_json = await resp.json()
-
-            timestamp = resp_json.get("timestamp")
-            play_passes = resp_json.get("playPasses")
-
-            start_time = None
-            end_time = None
-            if resp_json.get("farming"):
-                start_time = resp_json["farming"].get("startTime")
-                end_time = resp_json["farming"].get("endTime")
-
-            return (int(timestamp / 1000) if timestamp is not None else None,
-                    int(start_time / 1000) if start_time is not None else None,
-                    int(end_time / 1000) if end_time is not None else None,
-                    play_passes)
-        except Exception as e:
-            self.error(f"Error occurred during balance: {e}")
-
-    async def claim_daily_reward(self, http_client: aiohttp.ClientSession):
-        try:
-            resp = await http_client.post(f"{self.game_url}/api/v1/daily-reward?offset=-180",
-                                          ssl=False)
-            txt = await resp.text()
-            return True if txt == 'OK' else txt
-        except Exception as e:
-            self.error(f"Error occurred during claim daily reward: {e}")
 
     async def refresh_token(self, http_client: aiohttp.ClientSession, token):
         if "Authorization" in http_client.headers:
@@ -638,18 +421,11 @@ class Tapper:
 
         return resp_json.get('access'), resp_json.get('refresh')
 
-    async def check_proxy(self, http_client: aiohttp.ClientSession, proxy: Proxy) -> None:
-        try:
-            response = await http_client.get(url='https://httpbin.org/ip', timeout=aiohttp.ClientTimeout(5))
-            ip = (await response.json()).get('origin')
-            logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Proxy IP: {ip}")
-        except Exception as error:
-            logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Proxy: {proxy} | Error: {error}")
 
     async def run(self, proxy: str | None) -> None:
         if settings.USE_RANDOM_DELAY_IN_RUN:
             random_delay = random.randint(settings.RANDOM_DELAY_IN_RUN[0], settings.RANDOM_DELAY_IN_RUN[1])
-            logger.info(f"<light-yellow>{self.session_name}</light-yellow> | Bot will start in <ly>{random_delay}s</ly>")
+            self._log.info(f"Bot will start in <ly>{random_delay}s</ly>")
             await asyncio.sleep(random_delay)
 
         refresh_token = None
@@ -659,8 +435,10 @@ class Tapper:
 
         http_client = CloudflareScraper(headers=headers, connector=proxy_conn)
 
+        self._api.set_session(http_client)
+
         if proxy:
-            await self.check_proxy(http_client=http_client, proxy=proxy)
+            await check_proxy(http_client=http_client)
 
         while True:
             try:
@@ -670,92 +448,87 @@ class Tapper:
 
                     init_data = await self.get_tg_web_data(proxy=proxy)
                     if init_data:
-                        access_token, refresh_token = await self.login(http_client=http_client, initdata=init_data)
+                        access_token, refresh_token = await self.login(http_client=http_client, init_data=init_data)
                         if access_token and refresh_token:
                             http_client.headers["Authorization"] = f"Bearer {access_token}"
 
                         if self.first_run is not True:
-                            self.success("Logged in successfully")
+                            self._log.success("Logged in successfully")
                             self.first_run = True
 
-                timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
+                timestamp, start_time, end_time, play_passes = await self._api.balance()
 
                 if isinstance(play_passes, int) and login_need:
-                    self.info(f'You have {play_passes} play passes')
+                    self._log.info(f'You have {play_passes} play passes')
                     login_need = False
 
-                msg = await self.claim_daily_reward(http_client=http_client)
+                msg = await self._api.claim_daily_reward()
                 if isinstance(msg, bool) and msg:
-                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed daily reward!")
+                    self._log.success(f"Claimed daily reward!")
 
-                claim_amount, is_available = await self.friend_balance(http_client=http_client)
+                claim_amount, is_available = await self._api.friend_balance()
 
                 if claim_amount != 0 and is_available:
-                    amount = await self.friend_claim(http_client=http_client)
-                    self.success(f"Claimed friend ref reward {amount}")
+                    amount = await self._api.friend_claim()
+                    self._log.success(f"Claimed friend ref reward {amount}")
 
-                if play_passes and play_passes > 0 and settings.PLAY_GAMES is True:
-                    await self.play_game(http_client=http_client, play_passes=play_passes, refresh_token=refresh_token)
+                if settings.PLAY_GAMES is True and play_passes and play_passes > 0:
+                    await self.play_game(play_passes=play_passes)
 
                 await self.join_tribe(http_client=http_client)
 
                 if settings.AUTO_TASKS:
-                    tasks = await self.get_tasks(http_client=http_client)
+                    tasks = await self.get_tasks()
 
                     for task in tasks:
                         if task.get('status') == "NOT_STARTED" and task.get('type') != "PROGRESS_TARGET":
-                            self.info(f"Started doing task - '{task['title']}'")
-                            await self.start_task(http_client=http_client, task_id=task["id"])
+                            self._log.info(f"Started doing task - '{task['title']}'")
+                            await self._api.start_task(task_id=task["id"])
                             await asyncio.sleep(0.5)
 
                     await asyncio.sleep(5)
 
-                    tasks = await self.get_tasks(http_client=http_client)
+                    tasks = await self.get_tasks()
                     for task in tasks:
                         if task.get('status'):
                             if task['status'] == "READY_FOR_CLAIM" and task['type'] != 'PROGRESS_TASK':
-                                status = await self.claim_task(http_client=http_client, task_id=task["id"])
+                                status = await self._api.claim_task(task_id=task["id"])
                                 if status:
-                                    logger.success(f"<light-yellow>{self.session_name}</light-yellow> | Claimed task - "
-                                                   f"'{task['title']}'")
+                                    self._log.success(f"Claimed task - '{task['title']}'")
                                 await asyncio.sleep(0.5)
                             elif task['status'] == "READY_FOR_VERIFY" and task['validationType'] == 'KEYWORD':
-                                status = await self.validate_task(http_client=http_client, task_id=task["id"],
-                                                                  title=task['title'])
-
+                                status = await self.validate_task(http_client, task_id=task["id"])
                                 if status:
-                                    logger.success(
-                                        f"<light-yellow>{self.session_name}</light-yellow> | Validated task - "
-                                        f"'{task['title']}'")
+                                    self._log.success(f"Validated task - '{task['title']}'")
 
                 #await asyncio.sleep(random.uniform(1, 3))
 
                 try:
-                    timestamp, start_time, end_time, play_passes = await self.balance(http_client=http_client)
+                    timestamp, start_time, end_time, play_passes = await self._api.balance()
 
                     if start_time is None and end_time is None:
-                        await self.start(http_client=http_client)
-                        self.info(f"<lc>[FARMING]</lc> Start farming!")
+                        await self._api.start_farming()
+                        self._log.info(f"<lc>[FARMING]</lc> Start farming!")
 
                     elif (start_time is not None and end_time is not None and timestamp is not None and
                           timestamp >= end_time):
-                        timestamp, balance = await self.claim(http_client=http_client)
-                        self.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
+                        timestamp, balance = await self._api.claim_farm()
+                        self._log.success(f"<lc>[FARMING]</lc> Claimed reward! Balance: {balance}")
 
                     elif end_time is not None and timestamp is not None:
                         sleep_duration = end_time - timestamp
-                        self.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
+                        self._log.info(f"<lc>[FARMING]</lc> Sleep {format_duration(sleep_duration)}")
                         login_need = True
                         await asyncio.sleep(sleep_duration)
 
                 except Exception as e:
-                    self.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
+                    self._log.error(f"<lc>[FARMING]</lc> Error in farming management: {e}")
 
             except InvalidSession as error:
                 raise error
 
             except Exception as error:
-                logger.error(f"<light-yellow>{self.session_name}</light-yellow> | Unknown error: {error}")
+                self._log.error(f"Unknown error: {error}")
                 await asyncio.sleep(delay=3)
 
 

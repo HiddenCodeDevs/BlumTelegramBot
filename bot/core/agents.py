@@ -1,4 +1,6 @@
 import random
+import json
+from bot.utils.logger import logger
 
 existing_versions = {
     110: [
@@ -143,8 +145,7 @@ def generate_random_user_agent(device_type='android', browser_type='chrome'):
     if browser_type == 'chrome':
         major_version = random.choice(list(existing_versions.keys()))
         browser_version = random.choice(existing_versions[major_version])
-    elif browser_type == 'firefox':
-        browser_version = random.choice(firefox_versions)
+    browser_version = random.choice(firefox_versions)
 
     if device_type == 'android':
         android_versions = ['7.0', '7.1', '8.0', '8.1', '9.0', '10.0', '11.0', '12.0', '13.0', '14.0', '15.0']
@@ -201,3 +202,20 @@ def generate_random_user_agent(device_type='android', browser_type='chrome'):
                     f"Firefox/{browser_version}.0")
 
     return None
+
+def get_user_agents():
+    user_agents_file_name = "user_agents.json"
+
+    try:
+        with open(user_agents_file_name, 'r') as user_agents:
+            session_data = json.load(user_agents)
+            if isinstance(session_data, list):
+                return session_data
+
+    except FileNotFoundError:
+        logger.warning("User agents file not found, creating...")
+
+    except json.JSONDecodeError:
+        logger.warning("User agents file is empty or corrupted.")
+
+    return []

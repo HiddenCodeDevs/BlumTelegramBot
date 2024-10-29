@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     PLAY_GAMES: bool = True
     POINTS: list[int] = [190, 230]
+    USE_CUSTOM_PAYLOAD_SERVER: bool = True
+    CUSTOM_PAYLOAD_SERVER_URL: str = "http://localhost:9876"
 
     AUTO_TASKS: bool = True
 
