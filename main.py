@@ -1,7 +1,9 @@
 import asyncio
 from contextlib import suppress
 from argparse import ArgumentParser
-from bot.utils.launcher import get_session_names, get_proxies, start_text, run_tasks, register_sessions
+
+from bot.core.registrator import register_sessions
+from bot.utils.launcher import get_session_names, get_proxies, start_text, run_tasks
 from bot.utils.logger import logger
 
 

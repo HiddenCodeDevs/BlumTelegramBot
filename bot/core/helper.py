@@ -1,5 +1,10 @@
-def format_duration(seconds):
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    remaining_seconds = seconds % 60
-    return f"{hours} hours, {minutes} mins, {remaining_seconds} secs"
+from aiohttp import ClientSession
+from json import loads
+
+async def get_blum_database() -> dict | None:
+    url = 'https://raw.githubusercontent.com/zuydd/database/main/blum.json'
+    async with ClientSession() as session:
+        request = await session.get(url=url, headers={"Accept": "application/json"})
+        if request.status == 200:
+            body = await request.text()
+            return loads(body)

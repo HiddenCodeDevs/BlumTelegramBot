@@ -6,45 +6,60 @@ class BlumApi:
     game_url = "https://game-domain.blum.codes"
     earn_domain = "https://earn-domain.blum.codes"
     user_url = "https://user-domain.blum.codes"
+    tribe_url = "https://tribe-domain.blum.codes"
 
     _session: ClientSession
     _log: SessionLogger
 
     def __init__(self, logger: SessionLogger):
-        self._log = logger
+        self._log = SessionLogger("API |" + logger.session_name)
 
 
     def set_session(self, http_client: ClientSession):
         self._session = http_client
 
-    async def balance(self):
+    async def balance(self) -> dict | None:
         try:
-            resp = await self._session.get(f"{self.game_url}/api/v1/user/balance", ssl=False)
-            resp_json = await resp.json()
+            resp = await self._session.get(f"{self.game_url}/api/v1/user/balance")
+            data: dict = await resp.json()
 
-            timestamp = resp_json.get("timestamp")
-            play_passes = resp_json.get("playPasses")
-
-            start_time = None
-            end_time = None
-            if resp_json.get("farming"):
-                start_time = resp_json["farming"].get("startTime")
-                end_time = resp_json["farming"].get("endTime")
-
-            return (int(timestamp / 1000) if timestamp is not None else None,
-                    int(start_time / 1000) if start_time is not None else None,
-                    int(end_time / 1000) if end_time is not None else None,
-                    play_passes)
+            is_normal = True
+            for key in ["availableBalance", "playPasses", "isFastFarmingEnabled", "timestamp", "farming"]:
+                if key not in data:
+                    is_normal = False
+            if is_normal:
+                return data
+            self._log.error("Unknown balance structure, need update api")
         except Exception as e:
             self._log.error(f"Error occurred during balance: {e}")
 
-    async def claim_daily_reward(self):
+    async def daily_reward_is_available(self) -> str | None:
         try:
-            resp = await self._session.post(f"{self.game_url}/api/v1/daily-reward?offset=-180", ssl=False)
-            txt = await resp.text()
-            return True if txt == 'OK' else txt
+            resp = await self._session.get(f"{self.game_url}/api/v1/daily-reward?offset=-180")
+            data = await resp.json()
+            if data.get("message") == "Not Found":
+                return
+            days = data.get("days")
+            if days:
+                current_reward: dict = days[-1].get("reward")
+                return f"passes: {current_reward.get('passes')}, BP: {current_reward.get('points')}"
+            raise BaseException(f"need update daily_reward_is_available. response: {data}")
         except Exception as e:
             self._log.error(f"Error occurred during claim daily reward: {e}")
+
+    async def claim_daily_reward(self) -> bool:
+        try:
+            resp = await self._session.post(f"{self.game_url}/api/v1/daily-reward?offset=-180")
+            txt = await resp.text()
+            print(resp.status, txt)
+            if resp.status == 200:
+                return True
+
+            # return True if txt == 'OK' else txt
+            raise BaseException(f"need update claim_daily_reward. response: {txt}")
+        except Exception as e:
+            self._log.error(f"Error occurred during claim daily reward: {e}")
+        return False
 
 
     async def elig_dogs(self):
@@ -61,9 +76,9 @@ class BlumApi:
 
     async def start_game(self):
         try:
-            resp = await self._session.post(f"{self.game_url}/api/v2/game/play", ssl=False)
+            resp = await self._session.post(f"{self.game_url}/api/v2/game/play")
+            # {'gameId': '38cb2ed0-1978-4239-b0c1-f6dc5edf95cf', 'assets': {'BOMB': {'probability': '0.03', 'perClick': '1'}, 'CLOVER': {'probability': '0.95', 'perClick': '1'}, 'FREEZE': {'probability': '0.02', 'perClick': '1'}}}
             response_data = await resp.json()
-            self._log.debug(f"start_game. {response_data}")
             return response_data.get("gameId")
 
             # elif "message" in response_data:
@@ -73,7 +88,7 @@ class BlumApi:
 
     async def claim_game(self, payload: str) -> bool:
         try:
-            resp = await self._session.post(f"{self.game_url}/api/v2/game/claim", json={"payload": payload}, ssl=False)
+            resp = await self._session.post(f"{self.game_url}/api/v2/game/claim", json={"payload": payload})
             txt = await resp.text()
             if resp.status != 200:
                 self._log.error(f"error claim_game: {txt}")
@@ -102,78 +117,126 @@ class BlumApi:
     async def validate_task(self, task_id, keyword: str) -> bool:
         try:
             payload = {'keyword': keyword}
-
-            resp = await self._session.post(
-                f'{self.earn_domain}/api/v1/tasks/{task_id}/validate',
-                json=payload, ssl=False
-            )
+            resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/validate', json=payload)
             resp_json = await resp.json()
             if resp_json.get('status') == "READY_FOR_CLAIM":
                 return True
+            self._log.error(f"validate_task error: {resp_json}")
         except Exception as error:
             self._log.error(f"Start complete error {error}")
-        return False
 
     async def claim_task(self, task_id):
         try:
             resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/claim',
                                           ssl=False)
             resp_json = await resp.json()
-
-            return resp_json.get('status') == "FINISHED"
+            if resp_json.get('status') == "FINISHED":
+                return True
+            self._log.error(f"claim_task error: {resp_json}")
         except Exception as error:
             self._log.error(f"Claim task error {error}")
 
     async def start_farming(self):
         try:
             resp = await self._session.post(f"{self.game_url}/api/v1/farming/start", ssl=False)
+            data = await resp.json()
 
             if resp.status != 200:
                 self._log.error("Failed start farming")
+            return data
         except Exception as e:
             self._log.error(f"Error occurred during start: {e}")
 
     async def claim_farm(self):
         try:
-            resp = await self._session.post(f"{self.game_url}/api/v1/farming/claim", ssl=False)
-            if resp.status not in [200, 201]:
-                return None
+            resp = await self._session.post(f"{self.game_url}/api/v1/farming/claim")
             resp_json = await resp.json()
-            return int(resp_json.get("timestamp") / 1000), resp_json.get("availableBalance")
+            print("claim_farm", resp_json)
+            if resp.status == 200:
+                return resp_json.get("availableBalance")
 
         except Exception as e:
             self._log.error(f"Error occurred during claim: {e}")
 
 
-    async def friend_balance(self):
+    async def get_friends_balance(self) -> dict | None:
         try:
-            while True:
-                resp = await self._session.get(f"{self.user_url}/api/v1/friends/balance", ssl=False)
-                if resp.status not in [200, 201]:
-                    return 0, False
-                else:
-                    break
-            resp_json = await resp.json()
-            claim_amount = resp_json.get("amountForClaim")
-            is_available = resp_json.get("canClaim")
+            resp = await self._session.get(f"{self.user_url}/api/v1/friends/balance")
 
-            return (claim_amount,
-                    is_available)
+            resp_json = await resp.json()
+            if resp.status != 200:
+                raise Exception(f"error from get friends balance: {resp_json}")
+            return resp_json
         except Exception as e:
             self._log.error(f"Error occurred during friend balance: {e}")
 
-    async def friend_claim(self):
+    async def claim_friends_balance(self):
         try:
-
-            resp = await self._session.post(f"{self.user_url}/api/v1/friends/claim", ssl=False)
+            resp = await self._session.post(f"{self.user_url}/api/v1/friends/claim")
             resp_json = await resp.json()
+            print("claim_friends_balance", resp_json)
             amount = resp_json.get("claimBalance")
             if resp.status != 200:
-                resp = await self._session.post(f"{self.user_url}/api/v1/friends/claim", ssl=False)
-                resp_json = await resp.json()
-                amount = resp_json.get("claimBalance")
-
+                raise Exception(f"Failed claim_friends_balance: {resp_json}")
             return amount
         except Exception as e:
             self._log.error(f"Error occurred during friends claim: {e}")
 
+
+    async def search_tribe(self, chat_name):
+        if not chat_name:
+            return
+        try:
+            resp = await self._session.get(f'{self.tribe_url}/api/v1/tribe?search={chat_name}')
+            resp_json = await resp.json()
+            if resp.status != 200:
+                raise Exception(f"Failed search_tribe: {resp_json}")
+            result = resp_json.get("items")
+            if result:
+                return result.pop(0)
+
+        except Exception as e:
+            self._log.error(f"Error occurred during friends claim: {e}")
+
+    async def get_tribe_info(self, chat_name):
+        try:
+            resp = await self._session.get(f'{self.tribe_url}/api/v1/tribe/by-chatname/{chat_name}')
+            resp_json = await resp.json()
+            if resp.status == 200:
+                return resp_json
+            raise Exception(f"Failed get_tribe_info: {resp_json}")
+        except Exception as e:
+            self._log.error(f"Error occurred during friends claim: {e}")
+
+    async def get_my_tribe(self):
+        try:
+            resp = await self._session.get(f'{self.tribe_url}/api/v1/tribe/my')
+            resp_json = await resp.json()
+            if resp.status == 404 and resp_json.get("data"):
+                return resp_json.get("data")
+            if resp.status == 200 and resp_json.get("chatname"):
+                return resp_json
+            raise Exception(f"Failed get_my_tribe: {resp_json}")
+
+        except Exception as e:
+            self._log.error(f"Error occurred during friends claim: {e}")
+
+    async def leave_tribe(self):
+        try:
+            resp = await self._session.post(f'{self.tribe_url}/api/v1/tribe/leave', json={})
+            text = await resp.text()
+            if text == 'OK':
+                return True
+            raise Exception(f"Failed leave_tribe: {text}")
+        except Exception as e:
+            self._log.error(f"Error occurred during friends claim: {e}")
+
+    async def join_tribe(self, tribe_id):
+        try:
+            resp = await self._session.post(f'{self.tribe_url}/api/v1/tribe/{tribe_id}/join', json={})
+            text = await resp.text()
+            if text == 'OK':
+                return True
+            raise Exception(f"Failed join_tribe: {text}")
+        except Exception as e:
+            self._log.error(f"Error occurred during friends claim: {e}")
