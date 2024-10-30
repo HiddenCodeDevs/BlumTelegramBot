@@ -457,7 +457,7 @@ class Tapper:
                 if status:
                     self._log.success(f"Finish play in game! Reward: <g>{blum_points}</g>. {self.play_passes} passes left")
             except Exception as e:
-                self._log.error(f"Error occurred during play game: {e}")
+                self._log.error(f"Error occurred during play game: {type(e)} - {e}", )
 
     async def check_auth(self, proxy):
         if self.login_time == 0:

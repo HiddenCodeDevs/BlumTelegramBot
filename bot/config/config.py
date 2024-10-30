@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     USE_PROXY_FROM_FILE: bool = False
 
+    DEBUG: bool = False
 
 settings = Settings()
 
