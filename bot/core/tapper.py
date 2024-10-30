@@ -5,76 +5,50 @@ import shutil
 import string
 from urllib.parse import unquote
 
-import aiohttp
-import json
-
 from time import time
 
 from aiocfscrape import CloudflareScraper
 from aiohttp_proxy import ProxyConnector
-from better_proxy import Proxy
 from pyrogram import Client
-from pyrogram.errors import (Unauthorized, UserDeactivated, AuthKeyUnregistered, UserDeactivatedBan,
-                             AuthKeyDuplicated, SessionExpired, SessionRevoked)
+from pyrogram.errors import (
+    Unauthorized, UserDeactivated, AuthKeyUnregistered, UserDeactivatedBan,
+    AuthKeyDuplicated, SessionExpired, SessionRevoked
+)
 from pyrogram.raw.functions.messages import RequestAppWebView
-from pyrogram.raw import types
+from pyrogram.raw.types import InputBotAppShortName
+
 
 from bot.config import settings
-
-from bot.exceptions import InvalidSession
-from bot.core.agents import generate_random_user_agent, get_user_agents
+from bot.core.agents import check_user_agent
 from bot.core.api import BlumApi
-from bot.core.headers import headers
-from bot.core.helper import get_blum_database
+from bot.core.headers import headers as default_headers
+from bot.core.helper import get_blum_database, set_proxy_for_tg_client
+from bot.exceptions import InvalidSession
 from bot.utils.payload import check_payload_server, get_payload
 from bot.utils.logger import logger, SessionLogger
 from bot.utils.checkers import check_proxy
 
-
+SLEEP_SEC_BEFORE_ITERATIONS = 60 * 5
 
 class Tapper:
-
-    _log: SessionLogger = None
-    _session: CloudflareScraper = None
-
     user_url = "https://user-domain.blum.codes"
     gateway_url = "https://gateway.blum.codes"
     wallet_url = "https://wallet-domain.blum.codes"
     subscription_url = "https://subscription.blum.codes"
 
-
+    username: str
     play_passes: int
     farming_data: dict | None
+    _log: SessionLogger = None
+    _session: CloudflareScraper = None
 
     def __init__(self, tg_client: Client):
         self.tg_client = tg_client
-
         self._log = SessionLogger(self.tg_client.name)
         self._api = BlumApi(self._log)
-
-        self.user_id = 0
-        self.username = None
-        self.first_name = None
-        self.last_name = None
-        self.fullname = None
-        self.start_param = None
-        self.peer = None
-
-        self.session_ug_dict = get_user_agents() or []
-
-        headers['User-Agent'] = self.check_user_agent()
-
+        self.start_param: str = choices([settings.REF_ID, "ref_QwD3tLsY8f"], weights=[75, 25], k=1)[0]
         self.refresh_token = ""
         self.login_time = 0
-
-    async def get_new_auth_tokens(self):
-        if "Authorization" in self._session.headers:
-            del self._session.headers["Authorization"]
-        json_data = {'refresh': self.refresh_token}
-        resp = await self._session.post(f"{self.user_url}/api/v1/auth/refresh", json=json_data, ssl=False)
-        resp_json = await resp.json()
-        return resp_json.get('access'), resp_json.get('refresh')
-
 
     def set_tokens(self, access_token, refresh_token):
         if access_token and refresh_token:
@@ -85,7 +59,7 @@ class Tapper:
             self._log.error('Can`t get new token, trying again')
 
     async def update_access_token(self):
-        access_token, refresh_token = await self.get_new_auth_tokens()
+        access_token, refresh_token = await self._api.get_new_auth_tokens(self.refresh_token)
         self.set_tokens(access_token, refresh_token)
         self.login_time = time()
 
@@ -94,111 +68,30 @@ class Tapper:
         if not init_data:
             self._log.error("Auth error, not init_data from tg_web_data")
             return
-        access_token, refresh_token = await self.login(http_client=self._session, init_data=init_data)
+        access_token, refresh_token = await self.login(init_data=init_data)
         self.set_tokens(access_token, refresh_token)
         self._log.info("Account login successfully")
-
-
-    def save_user_agent(self):
-        user_agents_file_name = "user_agents.json"
-
-        if not any(session['session_name'] == self.tg_client.name for session in self.session_ug_dict):
-            user_agent_str = generate_random_user_agent()
-
-            self.session_ug_dict.append({
-                'session_name': self.tg_client.name,
-                'user_agent': user_agent_str})
-
-            with open(user_agents_file_name, 'w') as user_agents:
-                json.dump(self.session_ug_dict, user_agents, indent=4)
-
-            self._log.success(f"User agent saved successfully")
-
-            return user_agent_str
-
-
-
-    def check_user_agent(self):
-        load = next(
-            (
-                session['user_agent']
-                for session in self.session_ug_dict
-                if session['session_name'] == self.tg_client.name
-            ), None
-        )
-
-        if load is None:
-            return self.save_user_agent()
-
-        return load
 
     async def get_tg_web_data(self, proxy: str | None):
         if "Authorization" in self._session.headers:
             del self._session.headers["Authorization"]
-        if proxy:
-            proxy = Proxy.from_str(proxy)
-            proxy_dict = dict(
-                scheme=proxy.protocol,
-                hostname=proxy.host,
-                port=proxy.port,
-                username=proxy.login,
-                password=proxy.password
-            )
-        else:
-            proxy_dict = None
 
-        self.tg_client.proxy = proxy_dict
+        set_proxy_for_tg_client(self.tg_client, proxy)
 
         try:
-            with_tg = True
-
             if not self.tg_client.is_connected:
-                with_tg = False
-                try:
-                    await self.tg_client.connect()
-                except (Unauthorized, UserDeactivated, AuthKeyUnregistered, UserDeactivatedBan, AuthKeyDuplicated,
-                        SessionExpired, SessionRevoked):
-                    if self.tg_client.is_connected:
-                        await self.tg_client.disconnect()
-                    session_file = f"sessions/{self.tg_client.name}.session"
-                    bad_session_file = f"{self.tg_client.name}.session"
-                    if os.path.exists(session_file):
-                        os.makedirs("deleted_sessions", exist_ok=True)
-                        shutil.move(session_file, f"deleted_sessions/{bad_session_file}")
-                        self._log.critical(f"Session is deleted, moving to deleted sessions folder")
-                    return None
-
-            self.start_param = choices([settings.REF_ID, "ref_QwD3tLsY8f"], weights=[75, 25], k=1)[0]
+                await self.tg_client.connect()
+            information = await self.tg_client.get_me()
+            self.username = information.username or ''
             peer = await self.tg_client.resolve_peer('BlumCryptoBot')
-            InputBotApp = types.InputBotAppShortName(bot_id=peer, short_name="app")
-
             web_view = await self.tg_client.invoke(RequestAppWebView(
                 peer=peer,
-                app=InputBotApp,
+                app=InputBotAppShortName(bot_id=peer, short_name="app"),
                 platform='android',
                 write_allowed=True,
                 start_param=self.start_param
             ))
-
-            auth_url = web_view.url
-            #print(auth_url)
-            tg_web_data = unquote(
-                string=auth_url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0])
-
-            try:
-                if self.user_id == 0:
-                    information = await self.tg_client.get_me()
-                    self.user_id = information.id
-                    self.first_name = information.first_name or ''
-                    self.last_name = information.last_name or ''
-                    self.username = information.username or ''
-            except Exception as e:
-                print(e)
-
-            if with_tg is False:
-                await self.tg_client.disconnect()
-
-            return tg_web_data
+            return unquote(string=web_view.url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0])
 
         except (Unauthorized, UserDeactivated, AuthKeyUnregistered, UserDeactivatedBan, AuthKeyDuplicated,
                 SessionExpired, SessionRevoked) as e:
@@ -210,105 +103,50 @@ class Tapper:
                 os.makedirs("deleted_sessions", exist_ok=True)
                 shutil.move(session_file, f"deleted_sessions/{bad_session_file}")
                 self._log.critical(f"Session is not working, moving to 'deleted sessions' folder, {e}")
-                await asyncio.sleep(99999999)
-
+                exit("Session is not working")
         except InvalidSession as error:
             raise error
-
         except Exception as error:
             self._log.error(f"Unknown error during Authorization: {error}")
-            await asyncio.sleep(delay=3)
+        finally:
+            if self.tg_client.is_connected:
+                await self.tg_client.disconnect()
 
-    async def login(self, http_client: aiohttp.ClientSession, init_data):
+    async def login(self, init_data):
         try:
-            await http_client.options(url=f'{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP')
+            init_data = {"query": init_data}
             while True:
-                if settings.USE_REF is False:
-                    resp = await http_client.post(
-                        url=f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
-                        json={"query": init_data}, ssl=False
-                    )
-                    if resp.status == 520:
-                        self._log.warning('Relogin')
-                        await asyncio.sleep(delay=3)
-                        continue
-                    resp_json = await resp.json()
+                if settings.USE_REF and not init_data.get("username"):
+                    init_data.update({"username": self.username, "referralToken": self.start_param.split('_')[1]})
 
+                resp_json  = await self._api.auth(init_data)
+                if not resp_json:
+                    await asyncio.sleep(delay=3)
+                    continue
+
+                if not settings.USE_REF and not init_data.get("username"):
                     return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
-                else:
+                if resp_json.get("message") == "Username is not available":
+                    rand_letters = ''.join(choices(string.ascii_lowercase, k=randint(3, 8)))
+                    new_name = self.username + rand_letters
 
-                    json_data = {"query": init_data, "username": self.username, "referralToken": self.start_param.split('_')[1]}
+                    init_data.update({"username": new_name})
 
-                    resp = await http_client.post(f"{self.user_url}/api/v1/auth/provider"
-                                                  "/PROVIDER_TELEGRAM_MINI_APP",
-                                                  json=json_data, ssl=False)
-                    if resp.status == 520:
-                        self._log.warning('Relogin')
+                    resp_json = await self._api.auth(init_data)
+                    if not resp_json:
                         await asyncio.sleep(delay=3)
                         continue
-                    #self.debug(f'login text {await resp.text()}')
-                    resp_json = await resp.json()
-
-                    if resp_json.get("message") == "Username is not available":
-                        while True:
-                            name = self.username
-                            rand_letters = ''.join(choices(string.ascii_lowercase, k=randint(3, 8)))
-                            new_name = name + rand_letters
-
-                            json_data = {"query": init_data, "username": new_name,
-                                         "referralToken": self.start_param.split('_')[1]}
-
-                            resp = await http_client.post(
-                                f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP",
-                                json=json_data, ssl=False)
-                            if resp.status == 520:
-                                self._log.warning('Relogin')
-                                await asyncio.sleep(delay=3)
-                                continue
-                            #self.debug(f'login text {await resp.text()}')
-                            resp_json = await resp.json()
-
-                            if resp_json.get("token"):
-                                self._log.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
-                                return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
-                            elif resp_json.get("message") == 'account is already connected to another user':
-
-                                resp = await http_client.post(f"{self.user_url}/api/v1/auth/provider"
-                                                              "/PROVIDER_TELEGRAM_MINI_APP",
-                                                              json={"query": init_data}, ssl=False)
-                                if resp.status == 520:
-                                    self._log.warning('Relogin')
-                                    await asyncio.sleep(delay=3)
-                                    continue
-                                resp_json = await resp.json()
-                                #self.debug(f'login text {await resp.text()}')
-                                return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
-                            else:
-                                self._log.info(f'Username taken, retrying register with new name')
-                                await asyncio.sleep(1)
+                    if resp_json.get("token"):
+                        self._log.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
+                        return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
 
                     elif resp_json.get("message") == 'account is already connected to another user':
-
-                        json_data = {"query": init_data}
-                        resp = await http_client.post(f"{self.user_url}/api/v1/auth/provider"
-                                                      "/PROVIDER_TELEGRAM_MINI_APP",
-                                                      json=json_data, ssl=False)
-                        if resp.status == 520:
-                            self._log.warning('Relogin')
+                        resp_json = await self._api.auth(init_data)
+                        if not resp_json:
                             await asyncio.sleep(delay=3)
                             continue
-                        resp_json = await resp.json()
-
                         return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
-                    elif resp_json.get("token"):
-
-                        self._log.success(f'Registered using ref - {self.start_param} and nickname - {self.username}')
-                        return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
         except Exception as error:
             self._log.error(f"Login error {error}")
             return None, None
@@ -339,10 +177,8 @@ class Tapper:
                     self._log.info(f"<r>Leave tribe {my_tribe.get('title')}</r>")
                 if await self._api.join_tribe(chat_tribe.get('id')):
                     self._log.success(f'Joined to tribe {chat_tribe["title"]}')
-
         except Exception as error:
             self._log.error(f"=Join tribe {error}")
-
 
     async def get_tasks(self):
         try:
@@ -366,7 +202,6 @@ class Tapper:
                     task.get("progressTarget", {}).get('target') > \
                     task.get("progressTarget", {}).get('progress'):
                     continue
-                # print(task.get("status"), task, "\n")
                 unique_tasks.update({task.get("id"): task})
             self._log.debug(f"Loaded {len(unique_tasks.keys())} tasks")
             return unique_tasks.values()
@@ -417,17 +252,22 @@ class Tapper:
 
         if not settings.USE_CUSTOM_PAYLOAD_SERVER:
             self._log.warning(f"Payload server not used. Pass play games!")
+            self._log.warning(
+                f"For using Payload server change configs and "
+                f"install local server from https://github.com/KobaProduction/BlumPayloadGenerator"
+              )
             return
 
         if not await check_payload_server(settings.CUSTOM_PAYLOAD_SERVER_URL, full_test=True):
-            self._log.error(f"Payload server not available, maybe offline. Url: {settings.CUSTOM_PAYLOAD_SERVER_URL}")
+            self._log.error(
+                f"Payload server not available, maybe offline. Using url: {settings.CUSTOM_PAYLOAD_SERVER_URL}"
+            )
             return
 
         tries = 3
 
         while self.play_passes:
             try:
-                # self._log.debug("sleep before start")
                 await self.check_auth(proxy)
                 await asyncio.sleep(uniform(1, 3))
                 game_id = await self._api.start_game()
@@ -440,16 +280,10 @@ class Tapper:
                         return self._log.warning('No more trying, gonna skip games')
                     continue
 
-
                 sleep_time = uniform(30, 40)
                 self._log.info(f"Started playing game ({game_id}). <r>Sleep {int(sleep_time)}s...</r>")
                 await asyncio.sleep(sleep_time)
-
                 blum_points = randint(settings.POINTS[0], settings.POINTS[1])
-                # dogs = random.randint(25, 30) * 5 if await self._api.elig_dogs() else 0
-
-                # data = await self.create_payload(http_client=http_client, game_id=game_id, points=points, dogs=dogs)
-
                 payload = await get_payload(settings.CUSTOM_PAYLOAD_SERVER_URL, game_id, blum_points)
                 status = await self._api.claim_game(payload)
                 await asyncio.sleep(uniform(1, 2))
@@ -521,6 +355,9 @@ class Tapper:
             await self.random_delay()
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
+
+        headers = default_headers.copy()
+        headers.update({'User-Agent': check_user_agent(self.tg_client.name)})
         self._session = CloudflareScraper(headers=headers, connector=proxy_conn)
 
         if proxy:
@@ -530,26 +367,28 @@ class Tapper:
 
         timer = 0
         while True:
+            delta_time = time() - timer
+            if delta_time <= SLEEP_SEC_BEFORE_ITERATIONS:
+                sleep_time = SLEEP_SEC_BEFORE_ITERATIONS - delta_time
+                self._log.info(f"Sleep <y>{int(sleep_time)}sec</y> before next checks...\n")
+                await asyncio.sleep(sleep_time)
             try:
-                delta_time = time() - timer
-                if delta_time <= 60 * 5:
-                    await asyncio.sleep(60 * 5 - delta_time)
-
                 await self.check_auth(proxy)
                 await self.check_daily_reward()
                 await self.update_balance(with_log=True)
                 await self.check_farming()
                 await self.check_friends_balance()
+                await self._api.elig_dogs()
+                # todo: add "api/v1/wallet/my/balance?fiat=usd", "api/v1/tribe/leaderboard" and another human behavior
                 await self.check_tribe()
                 await self.check_tasks()
                 await self.play_drop_game(proxy)
-
-                timer = time()
             except InvalidSession as error:
                 raise error
             except Exception as error:
                 self._log.error(f"Unknown error: {error}")
                 await asyncio.sleep(delay=3)
+            timer = time()
 
 
 async def run_tapper(tg_client: Client, proxy: str | None):

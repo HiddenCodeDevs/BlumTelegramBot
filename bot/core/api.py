@@ -18,6 +18,23 @@ class BlumApi:
     def set_session(self, http_client: ClientSession):
         self._session = http_client
 
+    async def auth(self, init_data):
+        await self._session.options(url=f'{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP')
+        resp = await self._session.post(url=f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP", json=init_data)
+        if resp.status == 520:
+            self._log.warning('Need re-login!')
+            return False
+        resp_json = await resp.json()
+        return resp_json
+
+    async def get_new_auth_tokens(self, refresh_token):
+        if "Authorization" in self._session.headers:
+            del self._session.headers["Authorization"]
+        json_data = {'refresh': refresh_token}
+        resp = await self._session.post(f"{self.user_url}/api/v1/auth/refresh", json=json_data, ssl=False)
+        resp_json = await resp.json()
+        return resp_json.get('access'), resp_json.get('refresh')
+
     async def balance(self) -> dict | None:
         try:
             resp = await self._session.get(f"{self.game_url}/api/v1/user/balance")
@@ -64,12 +81,11 @@ class BlumApi:
 
     async def elig_dogs(self):
         try:
-            resp = await self._session.get(f'https://{self.game_url}/api/v2/game/eligibility/dogs_drop')
-            if resp is not None:
-                data = await resp.json()
-                eligible = data.get('eligible', False)
-                return eligible
-
+            resp = await self._session.get(f'{self.game_url}/api/v2/game/eligibility/dogs_drop')
+            data = await resp.json()
+            if resp.status == 200:
+                return data.get('eligible', False)
+            raise Exception(f"Unknown eligibility status: {data}")
         except Exception as e:
             self._log.error(f"Failed elif dogs, error: {e}")
         return None
@@ -98,7 +114,7 @@ class BlumApi:
 
     async def get_tasks(self):
         try:
-            resp = await self._session.get(f'{self.earn_domain}/api/v1/tasks', ssl=False)
+            resp = await self._session.get(f'{self.earn_domain}/api/v1/tasks')
             if resp.status not in [200, 201]:
                 return None
             resp_json = await resp.json()
@@ -108,8 +124,7 @@ class BlumApi:
 
     async def start_task(self, task_id):
         try:
-            resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/start',
-                                          ssl=False)
+            resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/start')
 
         except Exception as error:
             self._log.error(f"Start complete error {error}")
@@ -121,14 +136,15 @@ class BlumApi:
             resp_json = await resp.json()
             if resp_json.get('status') == "READY_FOR_CLAIM":
                 return True
+            if resp_json.get('message') == "Incorrect task keyword":
+                return False
             self._log.error(f"validate_task error: {resp_json}")
         except Exception as error:
             self._log.error(f"Start complete error {error}")
 
     async def claim_task(self, task_id):
         try:
-            resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/claim',
-                                          ssl=False)
+            resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/claim')
             resp_json = await resp.json()
             if resp_json.get('status') == "FINISHED":
                 return True
@@ -138,7 +154,7 @@ class BlumApi:
 
     async def start_farming(self):
         try:
-            resp = await self._session.post(f"{self.game_url}/api/v1/farming/start", ssl=False)
+            resp = await self._session.post(f"{self.game_url}/api/v1/farming/start")
             data = await resp.json()
 
             if resp.status != 200:

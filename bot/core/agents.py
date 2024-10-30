@@ -2,6 +2,8 @@ import random
 import json
 from bot.utils.logger import logger
 
+USER_AGENTS_FILE_NAME = "user_agents.json"
+
 existing_versions = {
     110: [
         '110.0.5481.154',
@@ -142,10 +144,12 @@ existing_versions = {
 def generate_random_user_agent(device_type='android', browser_type='chrome'):
     firefox_versions = list(range(100, 127))  # Last 10 versions of Firefox
 
+    browser_version = random.choice(firefox_versions)
+
     if browser_type == 'chrome':
         major_version = random.choice(list(existing_versions.keys()))
         browser_version = random.choice(existing_versions[major_version])
-    browser_version = random.choice(firefox_versions)
+
 
     if device_type == 'android':
         android_versions = ['7.0', '7.1', '8.0', '8.1', '9.0', '10.0', '11.0', '12.0', '13.0', '14.0', '15.0']
@@ -204,10 +208,8 @@ def generate_random_user_agent(device_type='android', browser_type='chrome'):
     return None
 
 def get_user_agents():
-    user_agents_file_name = "user_agents.json"
-
     try:
-        with open(user_agents_file_name, 'r') as user_agents:
+        with open(USER_AGENTS_FILE_NAME, 'r') as user_agents:
             session_data = json.load(user_agents)
             if isinstance(session_data, list):
                 return session_data
@@ -219,3 +221,33 @@ def get_user_agents():
         logger.warning("User agents file is empty or corrupted.")
 
     return []
+
+def save_user_agent(session_name):
+    session_ug_dict = get_user_agents()
+
+    if not any(session['session_name'] == session_name for session in session_ug_dict):
+        user_agent_str = generate_random_user_agent()
+
+        session_ug_dict.append({'session_name': session_name, 'user_agent': user_agent_str})
+
+        with open(USER_AGENTS_FILE_NAME, 'w') as user_agents:
+            json.dump(session_ug_dict, user_agents, indent=4)
+
+        logger.success(f"User agent saved successfully")
+
+        return user_agent_str
+
+def check_user_agent(session_name: str):
+    session_ug_dict = get_user_agents()
+    load = next(
+        (
+            session['user_agent']
+            for session in session_ug_dict
+            if session['session_name'] == session_name
+        ), None
+    )
+
+    if load is None:
+        return save_user_agent(session_name)
+
+    return load
