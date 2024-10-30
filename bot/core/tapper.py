@@ -483,6 +483,7 @@ class Tapper:
     async def update_balance(self, with_log: bool = False):
         balance = await self._api.balance()
         self.farming_data = balance.get("farming")
+        self.farming_data.update({"farming_delta_times": self.farming_data.get("endTime") - balance.get("timestamp")})
         self.play_passes = balance.get("playPasses", 0)
         if not with_log:
             return
@@ -501,16 +502,19 @@ class Tapper:
 
     async def check_farming(self):
         await asyncio.sleep(uniform(1, 3))
-        if not self.farming_data:
-            status = await self._api.start_farming()
-            self._log.info(f"Start farming: {status}")
+        if self.farming_data and self.farming_data.get("farming_delta_times") >= 0:
+            self._log.info(f"Farming process... Farmed balance: {self.farming_data.get('balance')}")
             return
+        elif self.farming_data:
+            status = await self._api.claim_farm()
+            if status:
+                self._log.success(f"Claim farm <g>{self.farming_data.get('balance')}</g> points")
+            await asyncio.sleep(uniform(0.1, 0.5))
 
-        if self.farming_data.get("endTime") and self.farming_data.get("endTime") - time() >= 0:
-            self._log.info(f"Farming process... Farm balance: {self.farming_data.get('balance')}")
-            return
-        amount = await self._api.claim_farm()
-        self._log.success(f"Claim farm <g>{amount}</g> points")
+        status = await self._api.start_farming()
+        self._log.info(f"Start farming: {status}")
+        await asyncio.sleep(uniform(0.1, 0.5))
+        return await self.update_balance()
 
     async def run(self, proxy: str | None) -> None:
         if settings.USE_RANDOM_DELAY_IN_RUN:

@@ -147,14 +147,15 @@ class BlumApi:
         except Exception as e:
             self._log.error(f"Error occurred during start: {e}")
 
-    async def claim_farm(self):
+    async def claim_farm(self) -> bool | None:
         try:
             resp = await self._session.post(f"{self.game_url}/api/v1/farming/claim")
             resp_json = await resp.json()
-            print("claim_farm", resp_json)
-            if resp.status == 200:
-                return resp_json.get("availableBalance")
-
+            # {'availableBalance': '1.1', 'playPasses': 1, 'isFastFarmingEnabled': True, 'timestamp': 111}
+            for key in ['availableBalance', 'playPasses', 'isFastFarmingEnabled', 'timestamp']:
+                if key not in resp_json:
+                    raise Exception(f"Unknown structure claim_farm result: {resp_json}")
+            return True
         except Exception as e:
             self._log.error(f"Error occurred during claim: {e}")
 
