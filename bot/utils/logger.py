@@ -12,14 +12,16 @@ logger.add(sink=sys.stdout, level=level, format="<light-white>{time:YYYY-MM-DD H
                                    " | <level>{level}</level>"
                                    " | <light-white><b>{message}</b></light-white>")
 
+logger.add("blum_dev.log", level="DEBUG", format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}", rotation="20 MB")
+
 logger = logger.opt(colors=True)
 
 MessageMethod = Callable[[str], None]
 
-def disable_color_on_error(formatter, level):
+def disable_color_on_error(formatter, level_):
     def wrapper(*args, **kwargs):
         try:
-            getattr(logger, level)(formatter(*args, **kwargs))
+            getattr(logger, level_)(formatter(*args, **kwargs))
         except ValueError:
             getattr(logger.opt(colors=False), level)(*args, **kwargs)
     return wrapper
