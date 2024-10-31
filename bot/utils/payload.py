@@ -1,4 +1,4 @@
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientConnectorError
 from asyncio.exceptions import TimeoutError
 
 async def check_payload_server(payload_server_url: str, full_test: bool = False) -> bool:
@@ -14,7 +14,7 @@ async def check_payload_server(payload_server_url: str, full_test: bool = False)
                     if len(payload) == 684:
                         return True
                 return False
-        except TimeoutError:
+        except (TimeoutError, ClientConnectorError):
             pass
     return False
 
