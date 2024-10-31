@@ -16,8 +16,8 @@ async def main() -> None:
     action = parser.parse_args().action
 
     actions = {
-        1: run_tasks(),
-        2: register_sessions()
+        1: run_tasks,
+        2: register_sessions
     }
 
     if not action:
@@ -33,8 +33,13 @@ async def main() -> None:
                 action = int(action)
                 break
 
-    await actions[action]
+    await actions[action]()
 
 if __name__ == '__main__':
-    with suppress(KeyboardInterrupt):
-        asyncio.run(main())
+    try:
+        with suppress(KeyboardInterrupt):
+            asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
+    except BaseException as e:
+        raise BaseException

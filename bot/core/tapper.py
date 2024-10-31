@@ -46,9 +46,12 @@ class Tapper:
         self.tg_client = tg_client
         self._log = SessionLogger(self.tg_client.name)
         self._api = BlumApi(self._log)
-        self.start_param: str = choices([settings.REF_ID, "ref_QwD3tLsY8f"], weights=[75, 25], k=1)[0]
         self.refresh_token = ""
         self.login_time = 0
+
+    def __del__(self):
+        if self._session:
+            self._session.close()
 
     def set_tokens(self, access_token, refresh_token):
         if access_token and refresh_token:
@@ -65,6 +68,7 @@ class Tapper:
 
     async def auth(self, proxy):
         init_data = await self.get_tg_web_data(proxy=proxy)
+        self._log.debug("Got init data for auth.")
         if not init_data:
             self._log.error("Auth error, not init_data from tg_web_data")
             return
@@ -89,7 +93,7 @@ class Tapper:
                 app=InputBotAppShortName(bot_id=peer, short_name="app"),
                 platform='android',
                 write_allowed=True,
-                start_param=self.start_param
+                start_param=choices([settings.REF_ID, "ref_QwD3tLsY8f"], weights=(75, 25), k=1)[0]
             ))
             return unquote(string=web_view.url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0])
 
@@ -116,45 +120,33 @@ class Tapper:
         try:
             init_data = {"query": init_data}
             while True:
-                if settings.USE_REF and not init_data.get("username"):
-                    init_data.update({"username": self.username, "referralToken": self.start_param.split('_')[1]})
-
+                if settings.USE_REF is True and not init_data.get("username"):
+                    init_data.update({
+                        "username": self.username,
+                        "referralToken": choices([settings.REF_ID, "ref_QwD3tLsY8f"], weights=(75, 25), k=1)[0].split('_')[1]
+                    })
                 resp_json  = await self._api.auth(init_data)
                 if not resp_json:
+                    self._log.warning("Response after auth is exist, sleep 3s!")
                     await asyncio.sleep(delay=3)
                     continue
-
-                if not settings.USE_REF and not init_data.get("username"):
-                    return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
                 if resp_json.get("message") == "Username is not available":
                     rand_letters = ''.join(choices(string.ascii_lowercase, k=randint(3, 8)))
                     new_name = self.username + rand_letters
-
                     init_data.update({"username": new_name})
-
-                    resp_json = await self._api.auth(init_data)
-                    if not resp_json:
-                        await asyncio.sleep(delay=3)
-                        continue
-                    if resp_json.get("token"):
-                        self._log.success(f'Registered using ref - {self.start_param} and nickname - {new_name}')
-                        return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
-
-                    elif resp_json.get("message") == 'account is already connected to another user':
-                        resp_json = await self._api.auth(init_data)
-                        if not resp_json:
-                            await asyncio.sleep(delay=3)
-                            continue
-                        return resp_json.get("token").get("access"), resp_json.get("token").get("refresh")
+                    self._log.info(f'Try register using ref - {init_data.get("referralToken")} and nickname - {new_name}')
+                    continue
+                token = resp_json.get("token", {})
+                return token.get("access"), token.get("refresh")
         except Exception as error:
             self._log.error(f"Login error {error}")
             return None, None
 
     async def check_tribe(self):
         try:
-
             my_tribe = await self._api.get_my_tribe()
+            if my_tribe.get("blum_bug"):
+                return self._log.warning("<r>Blum or TG Bug!</r> Account in tribe, but tribe not loading and leaving.")
             if my_tribe.get("title"):
                 self._log.info(f"My tribe <g>{my_tribe.get('title')}</g> ({my_tribe.get('chatname')})")
 
@@ -178,7 +170,7 @@ class Tapper:
                 if await self._api.join_tribe(chat_tribe.get('id')):
                     self._log.success(f'Joined to tribe {chat_tribe["title"]}')
         except Exception as error:
-            self._log.error(f"=Join tribe {error}")
+            self._log.error(f"Join tribe {error}")
 
     async def get_tasks(self):
         try:
@@ -195,14 +187,13 @@ class Tapper:
                     collected_tasks.extend(task.get("subTasks"))
 
             unique_tasks = {}
+
+            task_types = ("SOCIAL_SUBSCRIPTION", "INTERNAL", "SOCIAL_MEDIA_CHECK")
             for task in collected_tasks:
-                if task.get("status") == "FINISHED":
-                    continue
-                if task.get("progressTarget") and \
-                    task.get("progressTarget", {}).get('target') > \
-                    task.get("progressTarget", {}).get('progress'):
-                    continue
-                unique_tasks.update({task.get("id"): task})
+                if  task['status'] == "NOT_STARTED" and task['type'] in task_types or \
+                    task['status'] == "READY_FOR_CLAIM" or \
+                    task['status'] == "READY_FOR_VERIFY" and task['validationType'] == 'KEYWORD':
+                    unique_tasks.update({task.get("id"): task})
             self._log.debug(f"Loaded {len(unique_tasks.keys())} tasks")
             return unique_tasks.values()
         except Exception as error:
@@ -210,7 +201,7 @@ class Tapper:
             return []
 
     async def check_tasks(self):
-        if not settings.AUTO_TASKS:
+        if settings.AUTO_TASKS is not True:
             return
 
         await asyncio.sleep(uniform(1, 3))
@@ -223,11 +214,10 @@ class Tapper:
 
             if not task.get('status'):
                 continue
-
-            if task.get('status') == "NOT_STARTED" and task.get('type') == "PROGRESS_TARGET":
+            if task.get('status') == "NOT_STARTED":
                 self._log.info(f"Started doing task - '{task['title']}'")
                 await self._api.start_task(task_id=task["id"])
-            elif task['status'] == "READY_FOR_CLAIM" and task['type'] != 'PROGRESS_TASK':
+            elif task['status'] == "READY_FOR_CLAIM":
                 status = await self._api.claim_task(task_id=task["id"])
                 if status:
                     self._log.success(f"Claimed task - '{task['title']}'")
@@ -247,16 +237,15 @@ class Tapper:
         await self.update_balance()
 
     async def play_drop_game(self, proxy):
-        if settings.PLAY_GAMES is False and not self.play_passes:
+        if settings.PLAY_GAMES is not True or not self.play_passes:
             return
 
-        if not settings.USE_CUSTOM_PAYLOAD_SERVER:
+        if not settings.USE_CUSTOM_PAYLOAD_SERVER is not True:
             self._log.warning(f"Payload server not used. Pass play games!")
-            self._log.warning(
-                f"For using Payload server change configs and "
+            return self._log.warning(
+                f"For using Payload server change config 'settings.USE_CUSTOM_PAYLOAD_SERVER' and "
                 f"install local server from https://github.com/KobaProduction/BlumPayloadGenerator"
-              )
-            return
+            )
 
         if not await check_payload_server(settings.CUSTOM_PAYLOAD_SERVER_URL, full_test=True):
             self._log.error(
@@ -281,7 +270,7 @@ class Tapper:
                     continue
 
                 sleep_time = uniform(30, 40)
-                self._log.info(f"Started playing game ({game_id}). <r>Sleep {int(sleep_time)}s...</r>")
+                self._log.info(f"Started playing game. <r>Sleep {int(sleep_time)}s...</r>")
                 await asyncio.sleep(sleep_time)
                 blum_points = randint(settings.POINTS[0], settings.POINTS[1])
                 payload = await get_payload(settings.CUSTOM_PAYLOAD_SERVER_URL, game_id, blum_points)
@@ -294,14 +283,18 @@ class Tapper:
                 self._log.error(f"Error occurred during play game: {type(e)} - {e}", )
 
     async def check_auth(self, proxy):
+        self._log.debug("Check auth")
         if self.login_time == 0:
             await self.auth(proxy)
         if self.login_time and time() - self.login_time >= 60 * 30:
             await self.update_access_token()
 
     async def random_delay(self):
-        random_delay = randint(settings.RANDOM_DELAY_IN_RUN[0], settings.RANDOM_DELAY_IN_RUN[1])
-        self._log.info(f"Bot will start in <ly>{random_delay}s</ly>")
+        await asyncio.sleep(uniform(0.1, 0.5))
+        if settings.USE_RANDOM_DELAY_IN_RUN is not True:
+            return
+        random_delay = uniform(settings.RANDOM_DELAY_IN_RUN[0], settings.RANDOM_DELAY_IN_RUN[1])
+        self._log.info(f"Bot will start in <ly>{int(random_delay)}s</ly>")
         await asyncio.sleep(random_delay)
 
     async def check_daily_reward(self):
@@ -328,6 +321,7 @@ class Tapper:
     async def check_friends_balance(self):
         balance = await self._api.get_friends_balance()
         if not balance or not balance.get("canClaim", False) or not balance.get("amountForClaim", 0):
+            self._log.debug(f"Not available friends balance.")
             return
         await asyncio.sleep(uniform(1, 3))
         amount = await self._api.claim_friends_balance()
@@ -346,13 +340,12 @@ class Tapper:
             await asyncio.sleep(uniform(0.1, 0.5))
 
         status = await self._api.start_farming()
-        self._log.info(f"Start farming: {status}")
+        self._log.info(f"Start farming!")
         await asyncio.sleep(uniform(0.1, 0.5))
-        return await self.update_balance()
+        await self.update_balance()
 
     async def run(self, proxy: str | None) -> None:
-        if settings.USE_RANDOM_DELAY_IN_RUN:
-            await self.random_delay()
+        await self.random_delay()
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
 
@@ -386,7 +379,7 @@ class Tapper:
             except InvalidSession as error:
                 raise error
             except Exception as error:
-                self._log.error(f"Unknown error: {error}")
+                self._log.error(f"Unhandled error ({type(error).__name__}): {error}")
                 await asyncio.sleep(delay=3)
             timer = time()
 
