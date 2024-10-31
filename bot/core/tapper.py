@@ -22,13 +22,13 @@ from bot.config import settings
 from bot.core.agents import check_user_agent
 from bot.core.api import BlumApi
 from bot.core.headers import headers as default_headers
-from bot.core.helper import get_blum_database, set_proxy_for_tg_client
+from bot.core.helper import get_blum_database, set_proxy_for_tg_client, format_duration
 from bot.exceptions import InvalidSession
 from bot.utils.payload import check_payload_server, get_payload
 from bot.utils.logger import logger, SessionLogger
 from bot.utils.checkers import check_proxy
 
-SLEEP_SEC_BEFORE_ITERATIONS = 60 * 5
+SLEEP_SEC_BEFORE_ITERATIONS = 60 * 60 * 2
 
 class Tapper:
     user_url = "https://user-domain.blum.codes"
@@ -370,7 +370,7 @@ class Tapper:
             delta_time = time() - timer
             if delta_time <= SLEEP_SEC_BEFORE_ITERATIONS:
                 sleep_time = SLEEP_SEC_BEFORE_ITERATIONS - delta_time
-                self._log.info(f"Sleep <y>{int(sleep_time)}sec</y> before next checks...\n")
+                self._log.info(f"Sleep <y>{format_duration(sleep_time)}</y> before next checks...")
                 await asyncio.sleep(sleep_time)
             try:
                 await self.check_auth(proxy)
