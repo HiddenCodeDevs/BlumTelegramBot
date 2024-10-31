@@ -1,9 +1,6 @@
 from aiohttp import ClientSession
-from js2py.base import ERRORS
 
 from bot.utils.logger import SessionLogger
-
-
 
 class BlumApi:
 
@@ -22,6 +19,14 @@ class BlumApi:
     def set_session(self, http_client: ClientSession):
         self._session = http_client
 
+    async def get(self, url: str):
+        await self._session.options(url=url, ssl=False)
+        return await self._session.get(url=url, ssl=False)
+
+    async def post(self, url: str, data: dict = None):
+        await self._session.options(url=url, ssl=False)
+        return await self._session.post(url=url, json=data, ssl=False)
+
     @staticmethod
     def error_wrapper(method):
         async def wrapper(self, *arg, **kwargs):
@@ -33,8 +38,7 @@ class BlumApi:
 
 
     async def auth(self, init_data):
-        await self._session.options(url=f'{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP')
-        resp = await self._session.post(url=f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP", json=init_data)
+        resp = await self.post(url=f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP", data=init_data)
         if resp.status == 520:
             self._log.warning('Need re-login!')
             return False
@@ -45,14 +49,14 @@ class BlumApi:
         if "Authorization" in self._session.headers:
             del self._session.headers["Authorization"]
         json_data = {'refresh': refresh_token}
-        resp = await self._session.post(f"{self.user_url}/api/v1/auth/refresh", json=json_data, ssl=False)
+        resp = await self.post(f"{self.user_url}/api/v1/auth/refresh", data=json_data)
         resp_json = await resp.json()
         return resp_json.get('access'), resp_json.get('refresh')
 
     @error_wrapper
     async def balance(self) -> dict | None:
-        resp = await self._session.get(f"{self.game_url}/api/v1/user/balance")
-        data: dict = await resp.json()
+        resp = await self.get(f"{self.game_url}/api/v1/user/balance")
+        data = await resp.json()
 
         is_normal = True
         for key in ["availableBalance", "playPasses", "isFastFarmingEnabled", "timestamp", "farming"]:
@@ -60,11 +64,11 @@ class BlumApi:
                 is_normal = False
         if is_normal:
             return data
-        self._log.error("Unknown balance structure, need update api")
+        self._log.error(f"Unknown balance structure. status: {resp.status}, body: {data}")
 
     @error_wrapper
     async def daily_reward_is_available(self) -> str | None:
-        resp = await self._session.get(f"{self.game_url}/api/v1/daily-reward?offset=-180")
+        resp = await self.get(f"{self.game_url}/api/v1/daily-reward?offset=-180")
         data = await resp.json()
         if data.get("message") == "Not Found":
             return
@@ -76,18 +80,15 @@ class BlumApi:
 
     @error_wrapper
     async def claim_daily_reward(self) -> bool:
-        resp = await self._session.post(f"{self.game_url}/api/v1/daily-reward?offset=-180")
+        resp = await self.post(f"{self.game_url}/api/v1/daily-reward?offset=-180")
         txt = await resp.text()
-        print(resp.status, txt)
-        if resp.status == 200:
+        if resp.status == 200 and txt == "OK":
             return True
-
-        # return True if txt == 'OK' else txt
-        raise BaseException(f"need update claim_daily_reward. response: {txt}")
+        raise BaseException(f"error struct, need update. response status {resp.status}, body: {txt}")
 
     @error_wrapper
     async def elig_dogs(self):
-        resp = await self._session.get(f'{self.game_url}/api/v2/game/eligibility/dogs_drop')
+        resp = await self.get(f'{self.game_url}/api/v2/game/eligibility/dogs_drop')
         data = await resp.json()
         if resp.status == 200:
             return data.get('eligible', False)
@@ -95,22 +96,22 @@ class BlumApi:
 
     @error_wrapper
     async def start_game(self):
-        resp = await self._session.post(f"{self.game_url}/api/v2/game/play")
+        resp = await self.post(f"{self.game_url}/api/v2/game/play")
         # {'gameId': '38cb2ed0-1978-4239-b0c1-f6dc5edf95cf', 'assets': {'BOMB': {'probability': '0.03', 'perClick': '1'}, 'CLOVER': {'probability': '0.95', 'perClick': '1'}, 'FREEZE': {'probability': '0.02', 'perClick': '1'}}}
         response_data = await resp.json()
         return response_data.get("gameId")
 
     @error_wrapper
     async def claim_game(self, payload: str) -> bool:
-        resp = await self._session.post(f"{self.game_url}/api/v2/game/claim", json={"payload": payload})
+        resp = await self.post(f"{self.game_url}/api/v2/game/claim", data={"payload": payload})
         txt = await resp.text()
         if resp.status != 200:
-            self._log.error(f"error claim_game: {txt}")
+            self._log.error(f"error claim_game. response status {resp.status}: {txt}")
         return True if txt == 'OK' else False
 
     @error_wrapper
     async def get_tasks(self):
-        resp = await self._session.get(f'{self.earn_domain}/api/v1/tasks')
+        resp = await self.get(f'{self.earn_domain}/api/v1/tasks')
         if resp.status not in [200, 201]:
             return None
         resp_json = await resp.json()
@@ -118,14 +119,16 @@ class BlumApi:
 
     @error_wrapper
     async def start_task(self, task_id):
-        resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/start')
-        print("start_task", resp)
-
+        resp = await self.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/start')
+        resp_json = await resp.json()
+        if resp_json.get("status") == 'STARTED':
+            return True
+        raise Exception(f"unknown response structure. status: {resp.status}. body: {resp_json}")
 
     @error_wrapper
     async def validate_task(self, task_id, keyword: str) -> bool:
         payload = {'keyword': keyword}
-        resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/validate', json=payload)
+        resp = await self.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/validate', data=payload)
         resp_json = await resp.json()
         if resp_json.get('status') == "READY_FOR_CLAIM":
             return True
@@ -135,7 +138,7 @@ class BlumApi:
 
     @error_wrapper
     async def claim_task(self, task_id):
-        resp = await self._session.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/claim')
+        resp = await self.post(f'{self.earn_domain}/api/v1/tasks/{task_id}/claim')
         resp_json = await resp.json()
         if resp_json.get('status') == "FINISHED":
             return True
@@ -143,7 +146,7 @@ class BlumApi:
 
     @error_wrapper
     async def start_farming(self):
-        resp = await self._session.post(f"{self.game_url}/api/v1/farming/start")
+        resp = await self.post(f"{self.game_url}/api/v1/farming/start")
         data = await resp.json()
 
         if resp.status != 200:
@@ -152,7 +155,7 @@ class BlumApi:
 
     @error_wrapper
     async def claim_farm(self) -> bool | None:
-        resp = await self._session.post(f"{self.game_url}/api/v1/farming/claim")
+        resp = await self.post(f"{self.game_url}/api/v1/farming/claim")
         resp_json = await resp.json()
         # {'availableBalance': '1.1', 'playPasses': 1, 'isFastFarmingEnabled': True, 'timestamp': 111}
         for key in ['availableBalance', 'playPasses', 'isFastFarmingEnabled', 'timestamp']:
@@ -162,7 +165,7 @@ class BlumApi:
 
     @error_wrapper
     async def get_friends_balance(self) -> dict | None:
-        resp = await self._session.get(f"{self.user_url}/api/v1/friends/balance")
+        resp = await self.get(f"{self.user_url}/api/v1/friends/balance")
 
         resp_json = await resp.json()
         if resp.status != 200:
@@ -171,19 +174,17 @@ class BlumApi:
 
     @error_wrapper
     async def claim_friends_balance(self):
-        resp = await self._session.post(f"{self.user_url}/api/v1/friends/claim")
+        resp = await self.post(f"{self.user_url}/api/v1/friends/claim")
         resp_json = await resp.json()
-        print("claim_friends_balance", resp_json)
-        amount = resp_json.get("claimBalance")
         if resp.status != 200:
             raise Exception(f"Failed claim_friends_balance: {resp_json}")
-        return amount
+        return resp_json.get("claimBalance")
 
     @error_wrapper
     async def search_tribe(self, chat_name):
         if not chat_name:
             return
-        resp = await self._session.get(f'{self.tribe_url}/api/v1/tribe?search={chat_name}')
+        resp = await self.get(f'{self.tribe_url}/api/v1/tribe?search={chat_name}')
         resp_json = await resp.json()
         if resp.status != 200:
             raise Exception(f"Failed search_tribe: {resp_json}")
@@ -193,7 +194,7 @@ class BlumApi:
 
     @error_wrapper
     async def get_tribe_info(self, chat_name):
-        resp = await self._session.get(f'{self.tribe_url}/api/v1/tribe/by-chatname/{chat_name}')
+        resp = await self.get(f'{self.tribe_url}/api/v1/tribe/by-chatname/{chat_name}')
         resp_json = await resp.json()
         if resp.status == 200:
             return resp_json
@@ -201,24 +202,28 @@ class BlumApi:
 
     @error_wrapper
     async def get_my_tribe(self):
-        resp = await self._session.get(f'{self.tribe_url}/api/v1/tribe/my')
+        resp = await self.get(f'{self.tribe_url}/api/v1/tribe/my')
         resp_json = await resp.json()
         if resp.status == 404 and resp_json.get("data"):
             return resp_json.get("data")
+        if resp.status == 424:
+            resp_json.update({"blum_bug": True})  # if return 424 blum not loaded tribes
+            return resp_json
         if resp.status == 200 and resp_json.get("chatname"):
             return resp_json
-        raise Exception(f"Failed get_my_tribe: {resp_json}")
+        raise Exception(f"Unknown structure. status {resp.status}, body: {resp_json}")
 
     @error_wrapper
     async def leave_tribe(self):
-        resp = await self._session.post(f'{self.tribe_url}/api/v1/tribe/leave', json={})
+        resp = await self.post(f'{self.tribe_url}/api/v1/tribe/leave', data={})
         text = await resp.text()
         if text == 'OK':
             return True
         raise Exception(f"Failed leave_tribe: {text}")
 
+    @error_wrapper
     async def join_tribe(self, tribe_id):
-        resp = await self._session.post(f'{self.tribe_url}/api/v1/tribe/{tribe_id}/join', json={})
+        resp = await self.post(f'{self.tribe_url}/api/v1/tribe/{tribe_id}/join', data={})
         text = await resp.text()
         if text == 'OK':
             return True
