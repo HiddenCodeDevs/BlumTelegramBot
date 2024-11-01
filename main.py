@@ -27,12 +27,11 @@ async def main() -> None:
             action = input("> ")
             if not action.isdigit():
                 logger.warning("Action must be number")
-            elif action not in actions:
+            elif int(action) not in actions:
                 logger.warning("Action must be 1 or 2")
             else:
                 action = int(action)
                 break
-
     await actions[action]()
 
 if __name__ == '__main__':
