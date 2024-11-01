@@ -29,6 +29,7 @@ def disable_color_on_error(formatter, level_):
 class SessionLogger:
 
     session_name: str
+    trace: MessageMethod
     debug: MessageMethod
     info: MessageMethod
     success: MessageMethod

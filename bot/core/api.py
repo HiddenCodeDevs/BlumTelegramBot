@@ -59,7 +59,7 @@ class BlumApi:
         data = await resp.json()
 
         is_normal = True
-        for key in ["availableBalance", "playPasses", "isFastFarmingEnabled", "timestamp", "farming"]:
+        for key in ["availableBalance", "playPasses", "isFastFarmingEnabled", "timestamp", "farming", "isFastFarmingEnabled"]:
             if key not in data:
                 is_normal = False
         if is_normal:

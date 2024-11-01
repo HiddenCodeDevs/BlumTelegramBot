@@ -240,7 +240,7 @@ class Tapper:
         if settings.PLAY_GAMES is not True or not self.play_passes:
             return
 
-        if not settings.USE_CUSTOM_PAYLOAD_SERVER is not True:
+        if settings.USE_CUSTOM_PAYLOAD_SERVER is not True:
             self._log.warning(f"Payload server not used. Pass play games!")
             return self._log.warning(
                 f"For using Payload server change config 'settings.USE_CUSTOM_PAYLOAD_SERVER' and "
@@ -283,7 +283,7 @@ class Tapper:
                 self._log.error(f"Error occurred during play game: {type(e)} - {e}", )
 
     async def check_auth(self, proxy):
-        self._log.debug("Check auth")
+        self._log.trace("Check auth")
         if self.login_time == 0:
             await self.auth(proxy)
         if self.login_time and time() - self.login_time >= 60 * 30:
