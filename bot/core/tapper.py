@@ -42,16 +42,17 @@ class Tapper:
     _log: SessionLogger = None
     _session: CloudflareScraper = None
 
-    def __init__(self, tg_client: Client):
+    def __init__(self, tg_client: Client, loop):
         self.tg_client = tg_client
         self._log = SessionLogger(self.tg_client.name)
         self._api = BlumApi(self._log)
         self.refresh_token = ""
         self.login_time = 0
+        self._loop = loop
 
     def __del__(self):
         if self._session:
-            self._session.close()
+            self._loop.create_task(self._session.close())
 
     def set_tokens(self, access_token, refresh_token):
         if access_token and refresh_token:
@@ -384,8 +385,8 @@ class Tapper:
             timer = time()
 
 
-async def run_tapper(tg_client: Client, proxy: str | None):
+async def run_tapper(tg_client: Client, proxy: str | None, loop):
     try:
-        await Tapper(tg_client=tg_client).run(proxy=proxy)
+        await Tapper(tg_client=tg_client, loop=loop).run(proxy=proxy)
     except InvalidSession:
         logger.error(f"{tg_client.name} | Invalid Session")

@@ -72,11 +72,13 @@ async def run_tasks():
     tg_clients = get_tg_clients()
     proxies = get_proxies()
     proxies_cycle = cycle(proxies) if proxies else None
+    loop = asyncio.get_event_loop()
     tasks = [
-        asyncio.create_task(
+        loop.create_task(
             run_tapper(
                 tg_client=tg_client,
                 proxy=next(proxies_cycle) if proxies_cycle else None,
+                loop=loop
             )
         )
         for tg_client in tg_clients
