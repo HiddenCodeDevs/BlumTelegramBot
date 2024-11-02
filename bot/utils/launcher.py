@@ -1,16 +1,14 @@
 import os
 import glob
 import asyncio
-import argparse
+
 from itertools import cycle
 
 from pyrogram import Client
 from better_proxy import Proxy
 
 from bot.config import settings
-from bot.utils import logger
 from bot.core.tapper import run_tapper
-from bot.core.registrator import register_sessions
 
 start_text = """
 ██████╗ ██╗     ██╗   ██╗███╗   ███╗████████╗ ██████╗ ██████╗  ██████╗ ████████╗
@@ -26,8 +24,6 @@ Select an action:
     2. Create session
     
 """
-
-global tg_clients
 
 
 def get_session_names() -> list[str]:
@@ -49,8 +45,7 @@ def get_proxies() -> list[Proxy]:
     return proxies
 
 
-async def get_tg_clients() -> list[Client]:
-    global tg_clients
+def get_tg_clients() -> list[Client]:
 
     session_names = get_session_names()
 
@@ -73,48 +68,17 @@ async def get_tg_clients() -> list[Client]:
 
     return tg_clients
 
-
-async def process() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--action", type=int, help="Action to perform")
-
-    logger.info(f"Detected {len(get_session_names())} sessions | {len(get_proxies())} proxies")
-
-    action = parser.parse_args().action
-
-    if not action:
-        print(start_text)
-
-        while True:
-            action = input("> ")
-
-            if not action.isdigit():
-                logger.warning("Action must be number")
-            elif action not in ["1", "2"]:
-                logger.warning("Action must be 1 or 2")
-            else:
-                action = int(action)
-                break
-
-    if action == 1:
-        tg_clients = await get_tg_clients()
-
-        await run_tasks(tg_clients=tg_clients)
-
-    elif action == 2:
-        await register_sessions()
-
-
-
-
-async def run_tasks(tg_clients: list[Client]):
+async def run_tasks():
+    tg_clients = get_tg_clients()
     proxies = get_proxies()
     proxies_cycle = cycle(proxies) if proxies else None
+    loop = asyncio.get_event_loop()
     tasks = [
-        asyncio.create_task(
+        loop.create_task(
             run_tapper(
                 tg_client=tg_client,
                 proxy=next(proxies_cycle) if proxies_cycle else None,
+                loop=loop
             )
         )
         for tg_client in tg_clients
