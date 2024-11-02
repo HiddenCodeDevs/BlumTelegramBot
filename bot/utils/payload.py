@@ -1,8 +1,14 @@
 from aiohttp import ClientSession, ClientConnectorError
 from asyncio.exceptions import TimeoutError
+from bot.utils.logger import logger
 
 async def check_payload_server(payload_server_url: str, full_test: bool = False) -> bool:
     url = f"{payload_server_url}/status"
+
+    if full_test and "https://" in payload_server_url and ("localhost:" in payload_server_url or "127.0.0.1:" in payload_server_url) :
+        logger.warning("Are you sure you specified the correct protocol? "
+                       "On local machines, <r>https</r> is usually not used!")
+
     async with ClientSession() as session:
         try:
             async with session.get(url, timeout=3) as response:
@@ -33,4 +39,4 @@ async def get_payload(payload_server_url: str, game_id: str, blum_points: int | 
             data = await response.json()
             if response.status == 200 and data.get("payload"):
                 return data.get("payload")
-            raise Exception(data.get("error"))
+            raise Exception(f"Payload Server Error: {data.get('error')}")
