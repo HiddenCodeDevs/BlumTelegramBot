@@ -42,17 +42,12 @@ class Tapper:
     _log: SessionLogger = None
     _session: CloudflareScraper = None
 
-    def __init__(self, tg_client: Client, loop):
+    def __init__(self, tg_client: Client):
         self.tg_client = tg_client
         self._log = SessionLogger(self.tg_client.name)
         self._api = BlumApi(self._log)
         self.refresh_token = ""
         self.login_time = 0
-        self._loop = loop
-
-    def __del__(self):
-        if self._session:
-            self._loop.create_task(self._session.close())
 
     def set_tokens(self, access_token, refresh_token):
         if access_token and refresh_token:
@@ -352,21 +347,20 @@ class Tapper:
         await self.random_delay()
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
-
         headers = default_headers.copy()
         headers.update({'User-Agent': check_user_agent(self.tg_client.name)})
-        self._session = CloudflareScraper(headers=headers, connector=proxy_conn)
+        async with CloudflareScraper(headers=headers, connector=proxy_conn) as session:
+            if proxy:
+                ip = await check_proxy(http_client=self._session)
+                if not ip:
+                    self._log.warning(f"Proxy {proxy} not available. Waiting for the moment when it will work...")
+                    ip = await wait_proxy(http_client=self._session)
+                self._log.info(f"Used proxy {proxy}. Real ip: {ip}")
+            else:
+                self._log.warning("Proxy not installed! This may lead to account ban! Be careful.")
 
-        if proxy:
-            ip = await check_proxy(http_client=self._session)
-            if not ip:
-                self._log.warning(f"Proxy {proxy} not available. Waiting for the moment when it will work...")
-                ip = await wait_proxy(http_client=self._session)
-            self._log.info(f"Used proxy {proxy}. Real ip: {ip}")
-        else:
-            self._log.warning("Proxy not installed! This may lead to account ban! Be careful.")
-
-        self._api.set_session(self._session)
+            self._session = session
+            self._api.set_session(self._session)
 
         timer = 0
         while True:
@@ -394,8 +388,8 @@ class Tapper:
             timer = time()
 
 
-async def run_tapper(tg_client: Client, proxy: str | None, loop):
+async def run_tapper(tg_client: Client, proxy: str | None):
     try:
-        await Tapper(tg_client=tg_client, loop=loop).run(proxy=proxy)
+        await Tapper(tg_client=tg_client).run(proxy=proxy)
     except InvalidSession:
         logger.error(f"{tg_client.name} | Invalid Session")
