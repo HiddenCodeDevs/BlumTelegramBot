@@ -313,7 +313,8 @@ class Tapper:
         if not balance:
             raise Exception("Failed to get balance.")
         self.farming_data = balance.get("farming")
-        self.farming_data.update({"farming_delta_times": self.farming_data.get("endTime") - balance.get("timestamp")})
+        if self.farming_data:
+            self.farming_data.update({"farming_delta_times": self.farming_data.get("endTime") - balance.get("timestamp")})
         self.play_passes = balance.get("playPasses", 0)
         if not with_log:
             return
@@ -342,7 +343,7 @@ class Tapper:
                 self._log.success(f"Claim farm <g>{self.farming_data.get('balance')}</g> points")
             await asyncio.sleep(uniform(0.1, 0.5))
 
-        status = await self._api.start_farming()
+        await self._api.start_farming()
         self._log.info(f"Start farming!")
         await asyncio.sleep(uniform(0.1, 0.5))
         await self.update_balance()
