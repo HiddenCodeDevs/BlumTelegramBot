@@ -310,6 +310,8 @@ class Tapper:
 
     async def update_balance(self, with_log: bool = False):
         balance = await self._api.balance()
+        if not balance:
+            raise Exception("Failed to get balance.")
         self.farming_data = balance.get("farming")
         self.farming_data.update({"farming_delta_times": self.farming_data.get("endTime") - balance.get("timestamp")})
         self.play_passes = balance.get("playPasses", 0)
