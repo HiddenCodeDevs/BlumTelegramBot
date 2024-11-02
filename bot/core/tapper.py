@@ -26,7 +26,7 @@ from bot.core.helper import get_blum_database, set_proxy_for_tg_client, format_d
 from bot.exceptions import InvalidSession
 from bot.utils.payload import check_payload_server, get_payload
 from bot.utils.logger import logger, SessionLogger
-from bot.utils.checkers import check_proxy
+from bot.utils.checkers import check_proxy, wait_proxy
 
 SLEEP_SEC_BEFORE_ITERATIONS = 60 * 60 * 2
 
@@ -357,7 +357,13 @@ class Tapper:
         self._session = CloudflareScraper(headers=headers, connector=proxy_conn)
 
         if proxy:
-            await check_proxy(http_client=self._session)
+            ip = await check_proxy(http_client=self._session)
+            if not ip:
+                self._log.warning(f"Proxy {proxy} not available. Waiting for the moment when it will work...")
+                ip = await wait_proxy(http_client=self._session)
+            self._log.info(f"Used proxy {proxy}. Real ip: {ip}")
+        else:
+            self._log.warning("Proxy not installed! This may lead to account ban! Be careful.")
 
         self._api.set_session(self._session)
 
