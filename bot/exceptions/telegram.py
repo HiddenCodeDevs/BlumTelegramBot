@@ -1,0 +1,3 @@
+
+class TelegramInvalidSessionException(Exception):
+    pass

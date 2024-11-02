@@ -6,7 +6,7 @@ from loguru import logger
 
 logger.remove()
 
-level = "TRACE" if settings.DEBUG else "INFO"
+level = "DEBUG" if settings.DEBUG else "INFO"
 
 logger.add(sink=sys.stdout, level=level, format="<light-white>{time:YYYY-MM-DD HH:mm:ss}</light-white>"
                                    " | <level>{level}</level>"
