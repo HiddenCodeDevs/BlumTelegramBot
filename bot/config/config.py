@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +27,11 @@ class Settings(BaseSettings):
 
     DEBUG: bool = False
 
-settings = Settings()
-
+try:
+    settings = Settings()
+except ValidationError as error:
+    print("ERRORS from .env file!")
+    for e in error.errors():
+        print(f"[{e['type']} error] Field: \"{' '.join(e['loc'])}\". Message: {e['msg']}")
+    exit(1)
 

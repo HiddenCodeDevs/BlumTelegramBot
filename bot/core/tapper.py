@@ -26,7 +26,7 @@ from bot.core.helper import get_blum_database, set_proxy_for_tg_client, format_d
 from bot.exceptions import InvalidSession
 from bot.utils.payload import check_payload_server, get_payload
 from bot.utils.logger import logger, SessionLogger
-from bot.utils.checkers import check_proxy
+from bot.utils.checkers import check_proxy, wait_proxy
 
 SLEEP_SEC_BEFORE_ITERATIONS = 60 * 60 * 2
 
@@ -310,8 +310,11 @@ class Tapper:
 
     async def update_balance(self, with_log: bool = False):
         balance = await self._api.balance()
+        if not balance:
+            raise Exception("Failed to get balance.")
         self.farming_data = balance.get("farming")
-        self.farming_data.update({"farming_delta_times": self.farming_data.get("endTime") - balance.get("timestamp")})
+        if self.farming_data:
+            self.farming_data.update({"farming_delta_times": self.farming_data.get("endTime") - balance.get("timestamp")})
         self.play_passes = balance.get("playPasses", 0)
         if not with_log:
             return
@@ -340,7 +343,7 @@ class Tapper:
                 self._log.success(f"Claim farm <g>{self.farming_data.get('balance')}</g> points")
             await asyncio.sleep(uniform(0.1, 0.5))
 
-        status = await self._api.start_farming()
+        await self._api.start_farming()
         self._log.info(f"Start farming!")
         await asyncio.sleep(uniform(0.1, 0.5))
         await self.update_balance()
@@ -355,7 +358,13 @@ class Tapper:
         self._session = CloudflareScraper(headers=headers, connector=proxy_conn)
 
         if proxy:
-            await check_proxy(http_client=self._session)
+            ip = await check_proxy(http_client=self._session)
+            if not ip:
+                self._log.warning(f"Proxy {proxy} not available. Waiting for the moment when it will work...")
+                ip = await wait_proxy(http_client=self._session)
+            self._log.info(f"Used proxy {proxy}. Real ip: {ip}")
+        else:
+            self._log.warning("Proxy not installed! This may lead to account ban! Be careful.")
 
         self._api.set_session(self._session)
 
