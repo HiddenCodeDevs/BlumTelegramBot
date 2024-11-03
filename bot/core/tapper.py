@@ -141,14 +141,10 @@ class Tapper:
             return
 
         if settings.USE_CUSTOM_PAYLOAD_SERVER is not True:
-            self._log.warning(f"Payload server not used. Pass play games!")
-            return self._log.warning(
-                f"For using Payload server change config 'settings.USE_CUSTOM_PAYLOAD_SERVER' and "
-                f"install local server from https://github.com/KobaProduction/BlumPayloadGenerator"
-            )
+            return self._log.warning(f"Payload server not used. Pass play games!")
 
         if not await check_payload_server(settings.CUSTOM_PAYLOAD_SERVER_URL, full_test=True):
-            self._log.error(
+            self._log.warning(
                 f"Payload server not available, maybe offline. Using url: {settings.CUSTOM_PAYLOAD_SERVER_URL}"
             )
             return
