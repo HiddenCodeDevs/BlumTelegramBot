@@ -10,7 +10,7 @@ from bot.utils.logger import logger
 async def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("-a", "--action", type=int, help="Action to perform")
-
+    print(start_text)
     logger.info(f"Detected {len(get_session_names())} sessions | {len(get_proxies())} proxies")
 
     action = parser.parse_args().action
@@ -21,8 +21,7 @@ async def main() -> None:
     }
 
     if not action:
-        print(start_text)
-
+        print(f"Select an action:\n    1. Run clicker\n    2. Create session")
         while True:
             action = input("> ")
             if not action.isdigit():
@@ -32,6 +31,7 @@ async def main() -> None:
             else:
                 action = int(action)
                 break
+
     await actions[action]()
 
 if __name__ == '__main__':
