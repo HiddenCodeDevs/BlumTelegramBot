@@ -3,8 +3,9 @@ import traceback
 from random import randint, uniform
 from time import time
 
+from better_proxy import Proxy
 from aiocfscrape import CloudflareScraper
-from aiohttp_proxy import ProxyConnector
+from aiohttp_socks import ProxyConnector
 from pyrogram import Client
 
 from bot.config import settings
@@ -13,7 +14,7 @@ from bot.core.api import BlumApi
 from bot.core.headers import headers as default_headers
 from bot.core.helper import get_blum_database, set_proxy_for_tg_client, format_duration, move_session_to_deleted
 from bot.core.tg_auth import get_tg_web_data
-from bot.exceptions import NeedReLoginError, TelegramInvalidSessionException
+from bot.exceptions import NeedReLoginError, TelegramInvalidSessionException, TelegramProxyError
 from bot.utils.payload import check_payload_server, get_payload
 from bot.utils.logger import SessionLogger
 from bot.utils.checkers import check_proxy, wait_proxy
@@ -135,7 +136,7 @@ class Tapper:
         await asyncio.sleep(uniform(0.5, 1))
         await self.update_balance()
 
-    async def play_drop_game(self, proxy):
+    async def play_drop_game(self):
         if settings.PLAY_GAMES is not True or not self.play_passes:
             return
 
@@ -238,10 +239,11 @@ class Tapper:
         await asyncio.sleep(uniform(0.1, 0.5))
         await self.update_balance()
 
-    async def run(self, proxy: str | None) -> None:
-        await self.random_delay()
+    async def run(self, proxy: Proxy | None) -> None:
+        if not settings.DEBUG:
+            await self.random_delay()
 
-        proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
+        proxy_conn = ProxyConnector().from_url(proxy.as_url) if proxy else None
         headers = default_headers.copy()
         headers.update({'User-Agent': check_user_agent(self.tg_client.name)})
         async with CloudflareScraper(headers=headers, connector=proxy_conn) as session:
@@ -250,11 +252,14 @@ class Tapper:
                 if not ip:
                     self._log.warning(f"Proxy {proxy} not available. Waiting for the moment when it will work...")
                     ip = await wait_proxy(session)
-                self._log.info(f"Used proxy {proxy}. Real ip: {ip}")
+                self._log.info(f"Used proxy <y>{proxy}</y>. Real ip: <g>{ip}</g>")
                 set_proxy_for_tg_client(self.tg_client, proxy)
             else:
                 self._log.warning("Proxy not installed! This may lead to account ban! Be careful.")
-            await self.auth(session)
+            try:
+                await self.auth(session)
+            except TelegramProxyError:
+                return self._log.error(f"<r>The selected proxy cannot be applied to the Telegram client.</r>")
 
             timer = 0
             while True:
@@ -272,7 +277,7 @@ class Tapper:
                     # todo: add "api/v1/wallet/my/balance?fiat=usd", "api/v1/tribe/leaderboard" and another human behavior
                     await self.check_tribe()
                     await self.check_tasks()
-                    await self.play_drop_game(proxy)
+                    await self.play_drop_game()
                 except NeedReLoginError:
                     await self.auth(session)
                 except Exception:
@@ -282,7 +287,7 @@ class Tapper:
                 timer = time()
 
 
-async def run_tapper(tg_client: Client, proxy: str | None):
+async def run_tapper(tg_client: Client, proxy: Proxy | None):
     session_logger = SessionLogger(tg_client.name)
     try:
         await Tapper(tg_client, session_logger).run(proxy=proxy)

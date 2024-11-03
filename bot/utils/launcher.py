@@ -30,12 +30,16 @@ def get_session_names() -> list[str]:
 
 
 def get_proxies() -> list[Proxy]:
+    proxies = []
     if settings.USE_PROXY_FROM_FILE:
         with open(file="bot/config/proxies.txt", encoding="utf-8-sig") as file:
-            proxies = [Proxy.from_str(proxy=row.strip()).as_url for row in file]
-    else:
-        proxies = []
-
+            for line in file:
+                if "type://" in line:
+                    continue
+                try:
+                    proxies.append(Proxy.from_str(proxy=line.strip()))
+                except ValueError as e:
+                    print(f"{e} - {line}")
     return proxies
 
 

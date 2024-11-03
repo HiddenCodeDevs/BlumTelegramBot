@@ -31,8 +31,7 @@ def move_session_to_deleted(client: Client):
         os.makedirs("sessions/deleted_sessions", exist_ok=True)
     shutil.move(session_file, f"sessions/deleted_sessions/{client.name}.session")
 
-def set_proxy_for_tg_client(client: Client, proxy):
-    proxy = Proxy.from_str(proxy)
+def set_proxy_for_tg_client(client: Client, proxy: Proxy):
     proxy_dict = dict(
         scheme=proxy.protocol,
         hostname=proxy.host,

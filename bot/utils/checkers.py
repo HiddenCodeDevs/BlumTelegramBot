@@ -1,6 +1,9 @@
-from asyncio import sleep
+import traceback
+from asyncio import sleep, CancelledError
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.client_exceptions import ClientProxyConnectionError
+from python_socks import ProxyError
+
 from bot.utils.logger import logger
 
 async def check_proxy(http_client: ClientSession) -> str | None:
@@ -9,10 +12,12 @@ async def check_proxy(http_client: ClientSession) -> str | None:
         data = await response.json()
         if data and data.get('ip'):
             return data.get('ip')
-    except (ConnectionRefusedError, ClientProxyConnectionError):
+    except (ConnectionRefusedError, ClientProxyConnectionError, CancelledError):
         logger.trace(f"Proxy not available")
+    except ProxyError as e:
+        logger.error(f"The proxy type may be incorrect! Error: {type(e).__name__}: {e}")
     except Exception as e:
-        logger.error(f"Proxy check error {e.__name__}: {e}")
+        logger.error(f"{traceback.format_exc()}")
 
 
 async def wait_proxy(http_client: ClientSession, time_between_checks_sec: int = 5) -> str | None:

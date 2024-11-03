@@ -9,7 +9,7 @@ from pyrogram.raw.functions.messages import RequestAppWebView
 from pyrogram.raw.types import InputBotAppShortName
 
 from bot.core.helper import get_referral_token
-from bot.exceptions import TelegramInvalidSessionException
+from bot.exceptions import TelegramInvalidSessionException, TelegramProxyError
 from bot.utils.logger import SessionLogger
 
 
@@ -34,6 +34,8 @@ async def get_tg_web_data(client: Client, log: SessionLogger):
     except (Unauthorized, UserDeactivated, AuthKeyUnregistered, UserDeactivatedBan, AuthKeyDuplicated,
             SessionExpired, SessionRevoked):
         raise TelegramInvalidSessionException(f"Telegram session is invalid. Client: {client.name}")
+    except AttributeError as e:
+        raise TelegramProxyError(e)
     finally:
         if client.is_connected:
             await client.disconnect()
