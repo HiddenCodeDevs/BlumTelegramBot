@@ -27,10 +27,9 @@ async def get_blum_database() -> dict | None:
 
 def move_session_to_deleted(client: Client):
     session_file = f"sessions/{client.name}.session"
-    bad_session_file = f"{client.name}.session"
-    if os.path.exists(session_file):
-        os.makedirs("deleted_sessions", exist_ok=True)
-        shutil.move(session_file, f"deleted_sessions/{bad_session_file}")
+    if not os.path.exists("sessions/deleted_sessions"):
+        os.makedirs("sessions/deleted_sessions", exist_ok=True)
+    shutil.move(session_file, f"sessions/deleted_sessions/{client.name}.session")
 
 def set_proxy_for_tg_client(client: Client, proxy):
     proxy = Proxy.from_str(proxy)
