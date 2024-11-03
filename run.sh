@@ -34,6 +34,7 @@ git stash
 git pull
 git stash pop
 
+pip install -r requirements.txt
 echo "Starting the bot..."
 python3 main.py
 
