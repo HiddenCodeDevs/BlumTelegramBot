@@ -3,7 +3,7 @@ from aiohttp import ClientSession
 
 from bot.config import settings
 from bot.core.helper import get_referral_token, get_random_letters
-from bot.exceptions import NeedReLoginError, NeedRefreshTokenError, InvalidUsernameError
+from bot.exceptions import NeedReLoginError, NeedRefreshTokenError, InvalidUsernameError, AuthError
 from bot.utils.logger import SessionLogger
 
 class BlumApi:
@@ -65,7 +65,7 @@ class BlumApi:
             return resp_json
         if resp.status == 520:
             raise NeedReLoginError()
-        if resp.status == 500:
+        if resp.status == 500 and "Invalid username" in resp_json.get('message'):
             raise InvalidUsernameError(f"response data: {resp_json}")
         raise Exception(f"error auth_with_web_data. resp[{resp.status}]: {resp_json}")
 
@@ -74,17 +74,18 @@ class BlumApi:
         web_data = {"query": web_data}
         if settings.USE_REF is True and not web_data.get("username"):
             web_data.update({"username": web_data.get("username"), "referralToken": get_referral_token().split('_')[1]})
-        while True:
+        for _ in range(4):
             try:
                 data = await self.auth_with_web_data(web_data)
             except InvalidUsernameError as e:
                 self._log.warning(f"Maybe invalid (empty) username from TG account... Error: {e}")
-                web_data.update({"username": web_data.get("username", "username_") + get_random_letters()})
-                self._log.info(f'Try auth using username - {web_data.get("username")}')
-                await sleep(1)
+                web_data.update({"username": f"{web_data.get('username', 'username_')}{get_random_letters()}"})
+                self._log.warning(f'Try using username for auth - {web_data.get("username")}')
+                await sleep(5)
                 continue
             token = data.get("token", {})
             return self.set_tokens(token)
+        raise AuthError("Auth tries ended. Result Failed!")
 
     def set_tokens(self, token_data: dict):
         self._refresh_token = token_data.get('refresh', '')

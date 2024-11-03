@@ -7,3 +7,6 @@ class NeedRefreshTokenError(Exception):
 
 class InvalidUsernameError(Exception):
     pass
+
+class AuthError(Exception):
+    pass
