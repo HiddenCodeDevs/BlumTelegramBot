@@ -260,6 +260,9 @@ class Tapper:
                 await self.auth(session)
             except TelegramProxyError:
                 return self._log.error(f"<r>The selected proxy cannot be applied to the Telegram client.</r>")
+            except Exception as e:
+                self._log.error(f"{traceback.format_exc()}")
+                return self._log.critical(f"Stop Tapper. Reason: {e}")
 
             timer = 0
             while True:

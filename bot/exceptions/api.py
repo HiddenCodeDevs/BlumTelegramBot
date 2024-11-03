@@ -4,3 +4,6 @@ class NeedReLoginError(Exception):
 
 class NeedRefreshTokenError(Exception):
     pass
+
+class InvalidUsernameError(Exception):
+    pass
