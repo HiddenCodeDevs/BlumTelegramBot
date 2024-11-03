@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     USE_PROXY_FROM_FILE: bool = False
 
     DEBUG: bool = False
-    SLEEP_SEC_BEFORE_ITERATIONS: int = 60 * 60 * 2
+    SLEEP_MINUTES_BEFORE_ITERATIONS: list[int] = [120, 600]
 
 try:
     settings = Settings()

@@ -45,6 +45,10 @@ class Tapper:
     async def check_tribe(self):
         try:
             my_tribe = await self._api.get_my_tribe()
+            self._log.debug(f"my_tribe got: {my_tribe}")
+            if not isinstance(my_tribe, dict):
+                self._log.warning(f"Unknown my tribe data: {my_tribe}")
+                return
             if my_tribe.get("blum_bug"):
                 return self._log.warning("<r>Blum or TG Bug!</r> Account in tribe, but tribe not loading and leaving.")
             if my_tribe.get("title"):
@@ -70,7 +74,7 @@ class Tapper:
                 if await self._api.join_tribe(chat_tribe.get('id')):
                     self._log.success(f'Joined to tribe {chat_tribe["title"]}')
         except Exception as error:
-            self._log.error(f"Join tribe {error}")
+            self._log.error(f"{traceback.format_exc()}")
 
     async def get_tasks(self):
         try:
@@ -260,8 +264,12 @@ class Tapper:
             timer = 0
             while True:
                 delta_time = time() - timer
-                if delta_time <= settings.SLEEP_SEC_BEFORE_ITERATIONS:
-                    sleep_time = settings.SLEEP_SEC_BEFORE_ITERATIONS - delta_time
+                sleep_time = uniform(
+                    settings.SLEEP_MINUTES_BEFORE_ITERATIONS[0],
+                    settings.SLEEP_MINUTES_BEFORE_ITERATIONS[1]
+                ) * 60
+                if delta_time <= sleep_time:
+                    sleep_time = sleep_time - delta_time
                     self._log.info(f"Sleep <y>{format_duration(sleep_time)}</y> before next checks...")
                     await asyncio.sleep(sleep_time)
                 try:
