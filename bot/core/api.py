@@ -222,7 +222,7 @@ class BlumApi:
         return resp_json.get("claimBalance")
 
     @error_wrapper
-    async def search_tribe(self, chat_name):
+    async def search_tribe(self, chat_name) -> dict | None:
         if not chat_name:
             return
         resp = await self.get(f'{self.tribe_url}/api/v1/tribe?search={chat_name}')

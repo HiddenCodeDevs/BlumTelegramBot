@@ -45,7 +45,7 @@ class Tapper:
     async def check_tribe(self):
         try:
             my_tribe = await self._api.get_my_tribe()
-            self._log.debug(f"my_tribe got: {my_tribe}")
+            self._log.trace(f"my_tribe got: {my_tribe}")
             if not isinstance(my_tribe, dict):
                 self._log.warning(f"Unknown my tribe data: {my_tribe}")
                 return
@@ -61,7 +61,7 @@ class Tapper:
 
             chat_tribe = await self._api.search_tribe(chat_name)
 
-            if not chat_tribe.get("id"):
+            if not chat_tribe or not chat_tribe.get("id"):
                 self._log.warning(f"Tribe chat tag from config '{chat_name}' not found")
                 settings.TRIBE_CHAT_TAG = None
                 return
