@@ -1,8 +1,14 @@
 from aiohttp import ClientSession
 
+from bot.config import settings
+from bot.core.helper import get_referral_token, get_random_letters
+from bot.exceptions import NeedReLoginError, NeedRefreshTokenError
 from bot.utils.logger import SessionLogger
 
 class BlumApi:
+    gateway_url = "https://gateway.blum.codes"
+    wallet_url = "https://wallet-domain.blum.codes"
+    subscription_url = "https://subscription.blum.codes"
 
     game_url = "https://game-domain.blum.codes"
     earn_domain = "https://earn-domain.blum.codes"
@@ -11,47 +17,82 @@ class BlumApi:
 
     _session: ClientSession
     _log: SessionLogger
+    _refresh_token: str | None
 
-    def __init__(self, logger: SessionLogger):
-        self._log = SessionLogger("API |" + logger.session_name)
-
-
-    def set_session(self, http_client: ClientSession):
-        self._session = http_client
-
-    async def get(self, url: str):
-        await self._session.options(url=url, ssl=False)
-        return await self._session.get(url=url, ssl=False)
-
-    async def post(self, url: str, data: dict = None):
-        await self._session.options(url=url, ssl=False)
-        return await self._session.post(url=url, json=data, ssl=False)
+    def __init__(self, session: ClientSession, logger: SessionLogger):
+        self._log = SessionLogger("API | " + logger.session_name)
+        self._session = session
 
     @staticmethod
     def error_wrapper(method):
         async def wrapper(self, *arg, **kwargs):
             try:
                 return await method(self, *arg, **kwargs)
+            except NeedRefreshTokenError:
+                await self.refresh_tokens()
+                return await method(self, *arg, **kwargs)
+            except NeedReLoginError:
+                raise NeedReLoginError
             except Exception as e:
                 self._log.error(f"Error on BlumApi.{method.__name__} | {type(e).__name__}: {e}")
         return wrapper
 
+    async def get(self, url: str):
+        option_headers = {"access-control-request-method": "GET", **self._session.headers}
+        response = await self._session.options(url=url, headers=option_headers, ssl=False)
+        self._log.trace(f"[{response.status}] OPTIONS GET: {url}")
+        response = await self._session.get(url=url, ssl=False)
+        if response.status == 401:
+            raise NeedRefreshTokenError()
+        self._log.trace(f"[{response.status}] GET: {url}")
+        return response
 
-    async def auth(self, init_data):
-        resp = await self.post(url=f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP", data=init_data)
+    async def post(self, url: str, data: dict = None):
+        option_headers = {"access-control-request-method": "POST", **self._session.headers}
+        response = await self._session.options(url=url, headers=option_headers, ssl=False)
+        self._log.trace(f"[{response.status}] OPTIONS POST: {url}")
+        response = await self._session.post(url=url, json=data, ssl=False)
+        if response.status == 401:
+            raise NeedRefreshTokenError()
+        self._log.trace(f"[{response.status}] POST: {url}")
+        return response
+
+    async def auth_with_web_data(self, web_data) -> dict:
+        resp = await self.post(url=f"{self.user_url}/api/v1/auth/provider/PROVIDER_TELEGRAM_MINI_APP", data=web_data)
         if resp.status == 520:
-            self._log.warning('Need re-login!')
-            return False
+            raise NeedReLoginError()
         resp_json = await resp.json()
+        if resp.status != 200:
+            raise Exception(f"error auth_with_web_data. resp[{resp.status}]: {resp_json}")
         return resp_json
 
-    async def get_new_auth_tokens(self, refresh_token):
+    async def login(self, web_data: dict):
+        web_data = {"query": web_data}
+        if settings.USE_REF is True and not web_data.get("username"):
+            web_data.update({"username": web_data.get("username"), "referralToken": get_referral_token().split('_')[1]})
+        while True:
+            data = await self.auth_with_web_data(web_data)
+            if data.get("message") == "Username is not available":
+                web_data.update({"username": web_data.get("username") + get_random_letters()})
+                self._log.info(f'Try register using ref - {web_data.get("referralToken")}')
+                continue
+            token = data.get("token", {})
+            return self.set_tokens(token)
+
+    def set_tokens(self, token_data: dict):
+        self._refresh_token = token_data.get('refresh', '')
+        self._session.headers["Authorization"] = f"Bearer {token_data.get('access', '')}"
+
+    async def refresh_tokens(self):
         if "Authorization" in self._session.headers:
             del self._session.headers["Authorization"]
-        json_data = {'refresh': refresh_token}
-        resp = await self.post(f"{self.user_url}/api/v1/auth/refresh", data=json_data)
+        data = {'refresh': self._refresh_token}
+        resp = await self.post(f"{self.user_url}/api/v1/auth/refresh", data=data)
+        if resp.status == 401:
+            raise NeedReLoginError()
+        self._log.debug("Tokens have been successfully updated.")
         resp_json = await resp.json()
-        return resp_json.get('access'), resp_json.get('refresh')
+        self.set_tokens(resp_json)
 
     @error_wrapper
     async def balance(self) -> dict | None:
