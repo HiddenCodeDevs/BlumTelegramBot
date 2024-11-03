@@ -73,13 +73,16 @@ class BlumApi:
     async def login(self, web_data: dict):
         web_data = {"query": web_data}
         if settings.USE_REF is True and not web_data.get("username"):
-            web_data.update({"username": web_data.get("username"), "referralToken": get_referral_token().split('_')[1]})
+            web_data.update({
+                "username": web_data.get("username", get_random_letters()),
+                "referralToken": get_referral_token().split('_')[1]
+            })
         for _ in range(4):
             try:
                 data = await self.auth_with_web_data(web_data)
             except InvalidUsernameError as e:
                 self._log.warning(f"Maybe invalid (empty) username from TG account... Error: {e}")
-                web_data.update({"username": f"{web_data.get('username', 'username_')}{get_random_letters()}"})
+                web_data.update({"username": get_random_letters()})
                 self._log.warning(f'Try using username for auth - {web_data.get("username")}')
                 await sleep(5)
                 continue

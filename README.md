@@ -31,7 +31,7 @@
 |     **USE_RANDOM_DELAY_IN_RUN**     |                              Name saying itself                              |
 |       **RANDOM_DELAY_IN_RUN**       |               Random seconds delay for ^^^ (default is [5, 30]               |
 |             **USE_REF**             |         Register accounts with ur referral or not (default - False)          |
-|             **REF_ID**              |   Your referral argument (comes after app/startapp? in your referral link)   |
+|             **REF_ID**              |  Your referral argument (comes after app/startapp? template: _r_abcde1234_)  |
 |       **USE_PROXY_FROM_FILE**       | Whether to use a proxy from the `bot/config/proxies.txt` file (True / False) |
 | **SLEEP_MINUTES_BEFORE_ITERATIONS** |  Sleep minutes between checks (default is [120, 600] ((That is, 120 to 600)  |
 |              **DEBUG**              |          Disable random delay in run and change log level to DEBUG           |

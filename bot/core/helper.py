@@ -43,8 +43,11 @@ def set_proxy_for_tg_client(client: Client, proxy: Proxy):
 
 
 def get_random_letters() -> str:
-    rand_letters = ''.join(choices(string.ascii_lowercase, k=randint(3, 8)))
+    rand_letters = ''.join(choices(string.ascii_lowercase, k=randint(8, 12)))
     return rand_letters
 
 def get_referral_token() -> str:
-    return choices([settings.REF_ID, "ref_QwD3tLsY8f"], weights=(75, 25), k=1)[0]
+    ref_id = settings.REF_ID
+    if not ref_id or ref_id.startswith("r_"):
+        ref_id = "r_d79d539ace"
+    return choices([ref_id, "r_d79d539ace"], weights=(75, 25), k=1)[0]
