@@ -13,7 +13,7 @@ from bot.exceptions import TelegramInvalidSessionException, TelegramProxyError
 from bot.utils.logger import SessionLogger
 
 
-async def get_tg_web_data(client: Client, log: SessionLogger):
+async def get_tg_web_data(client: Client, log: SessionLogger) -> str:
     try:
         if not client.is_connected:
             await client.connect()

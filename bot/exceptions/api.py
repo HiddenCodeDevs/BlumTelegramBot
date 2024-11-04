@@ -10,3 +10,6 @@ class InvalidUsernameError(Exception):
 
 class AuthError(Exception):
     pass
+
+class AlreadyConnectError(Exception):
+    pass

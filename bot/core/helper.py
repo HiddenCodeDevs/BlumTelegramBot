@@ -1,7 +1,8 @@
 import os
 import shutil
-import string
-from random import choices, randint
+from hashlib import md5
+from random import choices
+from time import time
 
 from aiohttp import ClientSession
 from json import loads
@@ -42,9 +43,10 @@ def set_proxy_for_tg_client(client: Client, proxy: Proxy):
     client.proxy = proxy_dict
 
 
-def get_random_letters() -> str:
-    rand_letters = ''.join(choices(string.ascii_lowercase, k=randint(8, 12)))
-    return rand_letters
+def get_random_letters(hash_data: any = None) -> str:
+    hash_data = str(hash_data) if hash_data else str(time())
+    # rand_letters = ''.join(choices(string.ascii_lowercase, k=randint(8, 12)))
+    return md5(hash_data.encode()).hexdigest()
 
 def get_referral_token() -> str:
     ref_id = settings.REF_ID

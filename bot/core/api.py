@@ -1,9 +1,11 @@
 from asyncio import sleep
+from json import loads
+
+from urllib.parse import parse_qs
 from aiohttp import ClientSession
 
-from bot.config import settings
 from bot.core.helper import get_referral_token, get_random_letters
-from bot.exceptions import NeedReLoginError, NeedRefreshTokenError, InvalidUsernameError, AuthError
+from bot.exceptions import NeedReLoginError, NeedRefreshTokenError, InvalidUsernameError, AuthError, AlreadyConnectError
 from bot.utils.logger import SessionLogger
 
 class BlumApi:
@@ -66,25 +68,33 @@ class BlumApi:
         if resp.status == 520:
             raise NeedReLoginError()
         if resp.status == 500 and "Invalid username" in resp_json.get('message'):
-            raise InvalidUsernameError(f"response data: {resp_json}")
+            raise InvalidUsernameError(f"response data: {resp_json.get('message')}")
+        if resp.status == 500 and "account is already connected" in resp_json.get('message'):
+            raise AlreadyConnectError(f"response data: {resp_json.get('message')}")
         raise Exception(f"error auth_with_web_data. resp[{resp.status}]: {resp_json}")
 
 
-    async def login(self, web_data: dict):
-        web_data = {"query": web_data}
-        if settings.USE_REF is True and not web_data.get("username"):
-            web_data.update({
-                "username": web_data.get("username", get_random_letters()),
-                "referralToken": get_referral_token().split('_')[1]
-            })
+    async def login(self, web_data_params: str):
+        web_data = parse_qs(web_data_params)
+        user = loads(web_data.get("user", ['{}'])[0])
+        auth_web_data = {
+            "query": web_data_params,
+            "username": user.get("username", get_random_letters(user.get("id", ""))),
+            "referralToken": get_referral_token().split('_')[1]
+        }
         for _ in range(4):
             try:
-                data = await self.auth_with_web_data(web_data)
+                await sleep(0.1)
+                data = await self.auth_with_web_data(auth_web_data)
+            except AlreadyConnectError:
+                if auth_web_data.get("username"):
+                    auth_web_data.pop("username")
+                continue
             except InvalidUsernameError as e:
-                self._log.warning(f"Maybe invalid (empty) username from TG account... Error: {e}")
-                web_data.update({"username": get_random_letters()})
-                self._log.warning(f'Try using username for auth - {web_data.get("username")}')
-                await sleep(5)
+                self._log.warning(f"Invalid username from TG account... Error: {e}")
+                auth_web_data.update({"username": get_random_letters()})
+                self._log.warning(f'Try using username for auth - {auth_web_data.get("username")}')
+
                 continue
             token = data.get("token", {})
             return self.set_tokens(token)

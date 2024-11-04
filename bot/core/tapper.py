@@ -34,12 +34,12 @@ class Tapper:
 
     async def auth(self, session: CloudflareScraper):
         self._api = BlumApi(session, self._log)
-        web_data = await get_tg_web_data(self.tg_client, self._log)
+        web_data_params = await get_tg_web_data(self.tg_client, self._log)
         self._log.trace("Got init data for auth.")
-        if not web_data:
+        if not web_data_params:
             self._log.error("Auth error, not init_data from tg_web_data")
             return
-        await self._api.login(web_data=web_data)
+        await self._api.login(web_data_params=web_data_params)
         self._log.info("Account login successfully")
 
     async def check_tribe(self):
