@@ -13,3 +13,6 @@ class AuthError(Exception):
 
 class AlreadyConnectError(Exception):
     pass
+
+class UsernameNotAvailableError(Exception):
+    pass

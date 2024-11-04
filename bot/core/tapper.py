@@ -104,14 +104,16 @@ class Tapper:
             self._log.error(f"Get tasks error {error}")
             return []
 
-    async def check_tasks(self):
+    async def check_tasks(self) -> bool:
         if settings.AUTO_TASKS is not True:
-            return
+            return False
 
         await asyncio.sleep(uniform(1, 3))
         blum_database = await get_blum_database()
         tasks_codes = blum_database.get('tasks')
         tasks = await self.get_tasks()
+
+        is_task_started = False
 
         for task in tasks:
             await asyncio.sleep(uniform(0.5, 1))
@@ -120,7 +122,7 @@ class Tapper:
                 continue
             if task.get('status') == "NOT_STARTED":
                 self._log.info(f"Started doing task - '{task['title']}'")
-                await self._api.start_task(task_id=task["id"])
+                is_task_started = await self._api.start_task(task_id=task["id"])
             elif task['status'] == "READY_FOR_CLAIM":
                 status = await self._api.claim_task(task_id=task["id"])
                 if status:
@@ -139,6 +141,7 @@ class Tapper:
                     self._log.success(f"Claimed task - '{task['title']}'")
         await asyncio.sleep(uniform(0.5, 1))
         await self.update_balance()
+        return is_task_started
 
     async def play_drop_game(self):
         if settings.PLAY_GAMES is not True or not self.play_passes:
@@ -283,8 +286,10 @@ class Tapper:
                     await self._api.elig_dogs()
                     # todo: add "api/v1/wallet/my/balance?fiat=usd", "api/v1/tribe/leaderboard" and another human behavior
                     await self.check_tribe()
-                    await self.check_tasks()
+                    need_recheck_tasks = await self.check_tasks()
                     await self.play_drop_game()
+                    if need_recheck_tasks:
+                        await self.check_tasks()
                 except NeedReLoginError:
                     await self.auth(session)
                 except Exception:

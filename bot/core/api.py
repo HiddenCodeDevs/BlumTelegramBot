@@ -5,7 +5,8 @@ from urllib.parse import parse_qs
 from aiohttp import ClientSession
 
 from bot.core.helper import get_referral_token, get_random_letters
-from bot.exceptions import NeedReLoginError, NeedRefreshTokenError, InvalidUsernameError, AuthError, AlreadyConnectError
+from bot.exceptions import NeedReLoginError, NeedRefreshTokenError, InvalidUsernameError, AuthError, \
+    AlreadyConnectError, UsernameNotAvailableError
 from bot.utils.logger import SessionLogger
 
 class BlumApi:
@@ -33,7 +34,7 @@ class BlumApi:
                 return await method(self, *arg, **kwargs)
             except NeedRefreshTokenError:
                 await self.refresh_tokens()
-                return await method(self, *arg, **kwargs)
+                return await wrapper(method(self, *arg, **kwargs))
             except NeedReLoginError:
                 raise NeedReLoginError
             except Exception as e:
@@ -71,6 +72,8 @@ class BlumApi:
             raise InvalidUsernameError(f"response data: {resp_json.get('message')}")
         if resp.status == 500 and "account is already connected" in resp_json.get('message'):
             raise AlreadyConnectError(f"response data: {resp_json.get('message')}")
+        if resp.status == 409:
+            raise UsernameNotAvailableError(f"response data: {resp_json.get('message')}")
         raise Exception(f"error auth_with_web_data. resp[{resp.status}]: {resp_json}")
 
 
@@ -82,18 +85,17 @@ class BlumApi:
             "username": user.get("username", get_random_letters(user.get("id", ""))),
             "referralToken": get_referral_token().split('_')[1]
         }
-        for _ in range(4):
+        for _ in range(3):
             try:
                 await sleep(0.1)
                 data = await self.auth_with_web_data(auth_web_data)
-            except AlreadyConnectError:
+            except (UsernameNotAvailableError, AlreadyConnectError):
                 auth_web_data = {"query": web_data_params}
                 continue
             except InvalidUsernameError as e:
                 self._log.warning(f"Invalid username from TG account... Error: {e}")
                 auth_web_data.update({"username": get_random_letters()})
                 self._log.warning(f'Try using username for auth - {auth_web_data.get("username")}')
-
                 continue
             token = data.get("token", {})
             return self.set_tokens(token)
