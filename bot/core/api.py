@@ -87,8 +87,7 @@ class BlumApi:
                 await sleep(0.1)
                 data = await self.auth_with_web_data(auth_web_data)
             except AlreadyConnectError:
-                if auth_web_data.get("username"):
-                    auth_web_data.pop("username")
+                auth_web_data = {"query": web_data_params}
                 continue
             except InvalidUsernameError as e:
                 self._log.warning(f"Invalid username from TG account... Error: {e}")
