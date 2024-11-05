@@ -158,11 +158,9 @@ class BlumApi:
         raise Exception(f"Unknown eligibility status: {data}")
 
     @error_wrapper
-    async def start_game(self):
+    async def start_game(self) -> dict:
         resp = await self.post(f"{self.game_url}/api/v2/game/play")
-        # {'gameId': '38cb2ed0-1978-4239-b0c1-f6dc5edf95cf', 'assets': {'BOMB': {'probability': '0.03', 'perClick': '1'}, 'CLOVER': {'probability': '0.95', 'perClick': '1'}, 'FREEZE': {'probability': '0.02', 'perClick': '1'}}}
-        response_data = await resp.json()
-        return response_data.get("gameId")
+        return await resp.json()
 
     @error_wrapper
     async def claim_game(self, payload: str) -> bool:

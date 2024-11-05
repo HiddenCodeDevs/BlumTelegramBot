@@ -27,6 +27,7 @@ class Tapper:
     _log: SessionLogger
     _session: CloudflareScraper
     _api: BlumApi
+    _balance: float
 
     def __init__(self, tg_client: Client, log: SessionLogger):
         self.tg_client = tg_client
@@ -159,30 +160,59 @@ class Tapper:
         tries = 3
 
         while self.play_passes:
-            try:
-                await asyncio.sleep(uniform(1, 3))
-                game_id = await self._api.start_game()
+            if tries <= 0:
+                return self._log.warning('No more trying, gonna skip games')
+            if not await check_payload_server(settings.CUSTOM_PAYLOAD_SERVER_URL):
+                self._log.info(f"Couldn't start play in game! Reason: payload server not available")
+                tries -= 1
+                continue
 
-                if not game_id or not await check_payload_server(settings.CUSTOM_PAYLOAD_SERVER_URL):
-                    reason = "error get game_id" if not game_id else "payload server not available"
-                    self._log.info(f"Couldn't start play in game! Reason: {reason}! Trying again!")
-                    tries -= 1
-                    if tries <= 0:
-                        return self._log.warning('No more trying, gonna skip games')
-                    continue
 
-                sleep_time = uniform(30, 40)
-                self._log.info(f"Started playing game. <r>Sleep {int(sleep_time)}s...</r>")
-                await asyncio.sleep(sleep_time)
-                blum_points = randint(settings.POINTS[0], settings.POINTS[1])
-                payload = await get_payload(settings.CUSTOM_PAYLOAD_SERVER_URL, game_id, blum_points)
-                status = await self._api.claim_game(payload)
-                await asyncio.sleep(uniform(1, 2))
-                await self.update_balance()
-                if status:
-                    self._log.success(f"Finish play in game! Reward: <g>{blum_points}</g>. {self.play_passes} passes left")
-            except Exception as e:
-                self._log.error(f"Error occurred during play game: {type(e)} - {e}", )
+            await asyncio.sleep(uniform(1, 3))
+            game_data = await self._api.start_game()
+            game_assets = game_data.get("assets", {})
+            game_id = game_data.get("gameId")
+            if not game_data:
+                self._log.info(f"Couldn't start play in game! Reason: error get game_id!")
+                tries -= 1
+                continue
+
+            is_normal_structure = True
+
+            for asset in ("BOMB", "CLOVER", "FREEZE", "HARRIS", "TRUMP"):
+                if not asset in game_assets:
+                    is_normal_structure = False
+
+            if not is_normal_structure:
+                settings.PLAY_GAMES = False
+                self._log.error("<r>STOP PLAYING GAMES!</r> Unknown game data structure. Say developers for this!")
+
+            sleep_time = uniform(30, 42)
+            self._log.info(f"Started playing game. <r>Sleep {int(sleep_time)}s...</r>")
+
+            await asyncio.sleep(sleep_time)
+            freezes = int((sleep_time - 30) / 3)
+            clover = randint(settings.POINTS[0], settings.POINTS[1]) # blum points
+            harris = randint(10, 20)
+            tramp = randint(10, 20)
+
+            blum_amount = clover + harris * 5 + tramp * 5
+            earned_points = {"BP": {"amount": blum_amount}}
+            asset_clicks = {
+                "BOMB": {"clicks": 0},
+                "CLOVER": {"clicks": clover},
+                "FREEZE": {"clicks": freezes},
+                "HARRIS": {"clicks": harris},
+                "TRUMP": {"clicks": tramp},
+            }
+
+            payload = await get_payload(settings.CUSTOM_PAYLOAD_SERVER_URL, game_id, earned_points, asset_clicks)
+            status = await self._api.claim_game(payload)
+            await asyncio.sleep(uniform(1, 2))
+            await self.update_balance()
+            if status:
+                self._log.success(f"Finish play in game! Reward: <g>{blum_amount}</g>. "
+                                  f"Balance: <y>{self._balance}</y>, <r>{self.play_passes}</r> passes.")
 
     async def random_delay(self):
         await asyncio.sleep(uniform(0.1, 0.5))
@@ -212,8 +242,9 @@ class Tapper:
         self.play_passes = balance.get("playPasses", 0)
         if not with_log:
             return
+        self._balance = balance.get('availableBalance', -1.0)
         self._log.info("Balance <g>{}</g>. Play passes: <g>{}</g>".format(
-            balance.get('availableBalance'), self.play_passes
+            self._balance, self.play_passes
         ))
 
     async def check_friends_balance(self):
