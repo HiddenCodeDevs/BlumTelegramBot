@@ -34,7 +34,7 @@ class BlumApi:
                 return await method(self, *arg, **kwargs)
             except NeedRefreshTokenError:
                 await self.refresh_tokens()
-                return await wrapper(method(self, *arg, **kwargs))
+                return await method(self, *arg, **kwargs)
             except NeedReLoginError:
                 raise NeedReLoginError
             except Exception as e:
