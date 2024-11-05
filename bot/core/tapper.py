@@ -172,7 +172,7 @@ class Tapper:
             game_data = await self._api.start_game()
             game_assets = game_data.get("assets", {})
             game_id = game_data.get("gameId")
-            if not game_data:
+            if not game_id:
                 self._log.info(f"Couldn't start play in game! Reason: error get game_id!")
                 tries -= 1
                 continue

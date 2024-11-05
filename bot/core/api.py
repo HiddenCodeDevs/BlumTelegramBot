@@ -160,7 +160,10 @@ class BlumApi:
     @error_wrapper
     async def start_game(self) -> dict:
         resp = await self.post(f"{self.game_url}/api/v2/game/play")
-        return await resp.json()
+        data = await resp.json()
+        if resp.status == 200 and data.get("gameId"):
+            return data
+        raise Exception(f"Unknown start game data. resp[{resp.status}]: {data}")
 
     @error_wrapper
     async def claim_game(self, payload: str) -> bool:
