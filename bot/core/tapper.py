@@ -179,9 +179,10 @@ class Tapper:
 
             is_normal_structure = True
 
-            for asset in ("BOMB", "CLOVER", "FREEZE", "HARRIS", "TRUMP"):
+            for asset in ("BOMB", "CLOVER", "FREEZE"):
                 if not asset in game_assets:
                     is_normal_structure = False
+                    break
 
             if not is_normal_structure:
                 settings.PLAY_GAMES = False
@@ -193,17 +194,13 @@ class Tapper:
             await asyncio.sleep(sleep_time)
             freezes = int((sleep_time - 30) / 3)
             clover = randint(settings.POINTS[0], settings.POINTS[1]) # blum points
-            harris = randint(10, 20)
-            tramp = randint(10, 20)
 
-            blum_amount = clover + harris * 5 + tramp * 5
+            blum_amount = clover
             earned_points = {"BP": {"amount": blum_amount}}
             asset_clicks = {
                 "BOMB": {"clicks": 0},
                 "CLOVER": {"clicks": clover},
                 "FREEZE": {"clicks": freezes},
-                "HARRIS": {"clicks": harris},
-                "TRUMP": {"clicks": tramp},
             }
 
             payload = await get_payload(settings.CUSTOM_PAYLOAD_SERVER_URL, game_id, earned_points, asset_clicks)
