@@ -117,7 +117,23 @@ class BlumApi:
         self.set_tokens(resp_json)
 
     @error_wrapper
-    async def balance(self) -> dict | None:
+    async def wallet_my_balance(self) -> dict | None:
+        resp = await self.get(f"{self.wallet_url}/api/v1/wallet/my/balance?fiat=usd")
+        data = await resp.json()
+        if resp.status == 200:
+            return data
+        raise BaseException(f"Unknown wallets_balances structure. status: {resp.status}, body: {data}")
+
+    @error_wrapper
+    async def my_points_balance(self) -> dict | None:
+        resp = await self.get(f"{self.wallet_url}/api/v1/wallet/my/points/balance")
+        data = await resp.json()
+        if resp.status == 200:
+            return data
+        raise BaseException(f"Unknown wallets_balances structure. status: {resp.status}, body: {data}")
+
+    @error_wrapper
+    async def user_balance(self) -> dict | None:
         resp = await self.get(f"{self.game_url}/api/v1/user/balance")
         data = await resp.json()
 

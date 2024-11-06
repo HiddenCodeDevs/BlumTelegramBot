@@ -141,7 +141,8 @@ class Tapper:
                 if status:
                     self._log.success(f"Claimed task - '{task['title']}'")
         await asyncio.sleep(uniform(0.5, 1))
-        await self.update_balance()
+        await self.update_user_balance()
+        await self.update_points_balance()
         return is_task_started
 
     async def play_drop_game(self):
@@ -206,7 +207,8 @@ class Tapper:
             payload = await get_payload(settings.CUSTOM_PAYLOAD_SERVER_URL, game_id, earned_points, asset_clicks)
             status = await self._api.claim_game(payload)
             await asyncio.sleep(uniform(1, 2))
-            await self.update_balance()
+            await self.update_user_balance()
+            await self.update_points_balance()
             if status:
                 self._log.success(f"Finish play in game! Reward: <g>{blum_amount}</g>. "
                                   f"Balance: <y>{self._balance}</y>, <r>{self.play_passes}</r> passes.")
@@ -229,20 +231,33 @@ class Tapper:
         else:
             self._log.info(f"<y>No daily reward available.</y>")
 
-    async def update_balance(self, with_log: bool = False):
-        balance = await self._api.balance()
+    async def update_points_balance(self, with_log: bool = False):
+        await asyncio.sleep(uniform(0.1, 0.5))
+        balance = await self._api.my_points_balance()
+        if not balance:
+            return
+        points = balance.get("points", [])
+        for point in points:
+            balance = float(point.get("balance"))
+            if point.get("symbol") == "BP":
+                self._balance = int(balance)
+            if point.get("symbol") == "PP":
+                self.play_passes = int(balance)
+        if not with_log:
+            return
+        self._log.info("Balance <g>{}</g>. Play passes: <g>{}</g>".format(
+            self._balance, self.play_passes
+        ))
+
+    async def update_user_balance(self):
+        balance = await self._api.user_balance()
         if not balance:
             raise Exception("Failed to get balance.")
         self.farming_data = balance.get("farming")
         if self.farming_data:
             self.farming_data.update({"farming_delta_times": self.farming_data.get("endTime") - balance.get("timestamp")})
         self.play_passes = balance.get("playPasses", 0)
-        if not with_log:
-            return
-        self._balance = balance.get('availableBalance', -1.0)
-        self._log.info("Balance <g>{}</g>. Play passes: <g>{}</g>".format(
-            self._balance, self.play_passes
-        ))
+        self._balance = balance.get('availableBalance') or self._balance
 
     async def check_friends_balance(self):
         balance = await self._api.get_friends_balance()
@@ -268,7 +283,7 @@ class Tapper:
         await self._api.start_farming()
         self._log.info(f"Start farming!")
         await asyncio.sleep(uniform(0.1, 0.5))
-        await self.update_balance()
+        await self.update_user_balance()
 
     async def run(self, proxy: Proxy | None) -> None:
         if not settings.DEBUG:
@@ -308,7 +323,8 @@ class Tapper:
                     await asyncio.sleep(sleep_time)
                 try:
                     await self.check_daily_reward()
-                    await self.update_balance(with_log=True)
+                    await self.update_user_balance()
+                    await self.update_points_balance(with_log=True)
                     await self.check_farming()
                     await self.check_friends_balance()
                     await self._api.elig_dogs()
