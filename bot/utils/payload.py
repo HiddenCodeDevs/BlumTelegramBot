@@ -12,8 +12,17 @@ async def check_payload_server(payload_server_url: str, full_test: bool = False)
     async with ClientSession() as session:
         try:
             async with session.get(url, timeout=3) as response:
+                result = await response.json()
+                if response.status != 200 or result.get("status") != "ok":
+                    return False
+                if result.get("version", 0) < 2:
+                    logger.warning("<y>You need to update BlumPayloadGenerator, used old version</y>")
+                    return False
+                if result.get("version") > 2:
+                    logger.warning("<y>Your BlumTelegramBot script is out of date and needs to be updated.</y>")
+                    return False
                 if full_test:
-                    test_game_id = "test1234-test-1234-test-test1234test"
+                    test_game_id = "0000test-game-iden-tifi-cation123456"
                     asset_clicks = {
                         "BOMB": {"clicks": 0},
                         "CLOVER": {"clicks": 150},
@@ -24,9 +33,6 @@ async def check_payload_server(payload_server_url: str, full_test: bool = False)
                     earned_points = {"BP": {"amount": 150 + 300 * 5}}
                     payload = await get_payload(payload_server_url, test_game_id, earned_points, asset_clicks)
                     return len(payload) == 684
-
-                if response.status != 200 or (await response.json()).get("status") != "ok":
-                    return False
                 return True
         except (TimeoutError, ClientConnectorError):
             logger.debug(f"Try connect to payload server ({url}) failed...")

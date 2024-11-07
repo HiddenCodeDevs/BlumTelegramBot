@@ -76,7 +76,8 @@ async def run_tasks():
 
     if settings.USE_CUSTOM_PAYLOAD_SERVER and not await check_payload_server(settings.CUSTOM_PAYLOAD_SERVER_URL, full_test=True):
         logger.warning(
-            f"The payload server is unavailable or not running. <y>Without it, the bot will not play games for passes.</y> \n"
+            f"The payload server on {settings.CUSTOM_PAYLOAD_SERVER_URL} is unavailable or not running. "
+            f"<y>Without it, the bot will not play games for passes.</y> \n"
             f"<r>Read info</r>: https://github.com/HiddenCodeDevs/BlumTelegramBot/blob/main/PAYLOAD-SERVER.MD"
         )
 

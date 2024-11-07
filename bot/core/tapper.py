@@ -154,7 +154,8 @@ class Tapper:
 
         if not await check_payload_server(settings.CUSTOM_PAYLOAD_SERVER_URL, full_test=True):
             self._log.warning(
-                f"Payload server not available, maybe offline. Using url: {settings.CUSTOM_PAYLOAD_SERVER_URL}"
+                f"Payload server not available. Skip games... "
+                f"Info: https://github.com/HiddenCodeDevs/BlumTelegramBot/blob/main/PAYLOAD-SERVER.MD"
             )
             return
 
@@ -211,7 +212,7 @@ class Tapper:
             await self.update_points_balance()
             if status:
                 self._log.success(f"Finish play in game! Reward: <g>{blum_amount}</g>. "
-                                  f"Balance: <y>{self._balance}</y>, <r>{self.play_passes}</r> passes.")
+                                  f"Balance: <y>{self._balance}</y>, <r>{self.play_passes}</r> play passes.")
 
     async def random_delay(self):
         await asyncio.sleep(uniform(0.1, 0.5))
@@ -240,7 +241,7 @@ class Tapper:
         for point in points:
             balance = float(point.get("balance"))
             if point.get("symbol") == "BP":
-                self._balance = int(balance)
+                self._balance = balance
             if point.get("symbol") == "PP":
                 self.play_passes = int(balance)
         if not with_log:
