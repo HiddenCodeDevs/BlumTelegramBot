@@ -289,12 +289,12 @@ class Tapper:
         await asyncio.sleep(uniform(0.1, 0.5))
         await self.update_user_balance()
 
-    async def run(self, proxy: Proxy | None) -> None:
+    async def run(self, proxy: str | None) -> None:
         if not settings.DEBUG:
             await self.random_delay()
 
         ssl_context = TLSv1_3_BYPASS.create_ssl_context()
-        proxy_conn = ProxyConnector().from_url(url=proxy, rdns=True, ssl=ssl_context) if proxy \
+        proxy_conn = ProxyConnector().from_url(url=str(proxy), ssl=ssl_context) if proxy \
             else aiohttp.TCPConnector(ssl=ssl_context)
         headers = default_headers.copy()
         headers.update({'User-Agent': check_user_agent(self.tg_client.name)})

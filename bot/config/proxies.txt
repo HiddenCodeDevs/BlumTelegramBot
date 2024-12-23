@@ -1,5 +1,1 @@
-type://user:pass@ip:port
-type://user:pass:ip:port
-type://ip:port:user:pass
-type://ip:port@user:pass
-type://ip:port
+http://WfjMc4:onKhFm@89.185.77.165:8000

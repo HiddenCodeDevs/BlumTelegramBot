@@ -3,6 +3,7 @@ import glob
 import asyncio
 
 from itertools import cycle
+from typing import List
 
 from pyrogram import Client
 from better_proxy import Proxy
