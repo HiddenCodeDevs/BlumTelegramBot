@@ -1,5 +1,6 @@
 from asyncio import sleep
 from json import loads
+from typing import Tuple
 
 from urllib.parse import parse_qs
 from aiohttp import ClientSession
@@ -43,9 +44,9 @@ class BlumApi:
 
     async def get(self, url: str):
         option_headers = {"access-control-request-method": "GET", **self._session.headers}
-        response = await self._session.options(url=url, headers=option_headers, ssl=False)
+        response = await self._session.options(url=url, headers=option_headers)
         self._log.trace(f"[{response.status}] OPTIONS GET: {url}")
-        response = await self._session.get(url=url, ssl=False)
+        response = await self._session.get(url=url)
         if response.status == 401:
             raise NeedRefreshTokenError()
         self._log.trace(f"[{response.status}] GET: {url}")
@@ -53,9 +54,9 @@ class BlumApi:
 
     async def post(self, url: str, data: dict = None):
         option_headers = {"access-control-request-method": "POST", **self._session.headers}
-        response = await self._session.options(url=url, headers=option_headers, ssl=False)
+        response = await self._session.options(url=url, headers=option_headers)
         self._log.trace(f"[{response.status}] OPTIONS POST: {url}")
-        response = await self._session.post(url=url, json=data, ssl=False)
+        response = await self._session.post(url=url, json=data)
         if response.status == 401:
             raise NeedRefreshTokenError()
         self._log.trace(f"[{response.status}] POST: {url}")
@@ -146,22 +147,25 @@ class BlumApi:
         self._log.error(f"Unknown balance structure. status: {resp.status}, body: {data}")
 
     @error_wrapper
-    async def daily_reward_is_available(self) -> str | None:
-        resp = await self.get(f"{self.game_url}/api/v1/daily-reward?offset=-180")
+    async def daily_reward_is_available(self) -> tuple[str, bool] | None:
+        resp = await self.get(f"{self.game_url}/api/v2/daily-reward")
         data = await resp.json()
         if data.get("message") == "Not Found":
             return
-        days = data.get("days")
+        days = data.get("todayReward")
+        if data.get('claim') == 'unavailable':
+            status = False
+        else:
+            status = True
         if days:
-            current_reward: dict = days[-1].get("reward")
-            return f"passes: {current_reward.get('passes')}, BP: {current_reward.get('points')}"
+            return f"passes: {days.get('passes')}, BP: {days.get('points')}", status
         raise BaseException(f"need update daily_reward_is_available. response: {data}")
 
     @error_wrapper
     async def claim_daily_reward(self) -> bool:
-        resp = await self.post(f"{self.game_url}/api/v1/daily-reward?offset=-180")
-        txt = await resp.text()
-        if resp.status == 200 and txt == "OK":
+        resp = await self.post(f"{self.game_url}/api/v2/daily-reward")
+        txt = await resp.json()
+        if resp.status == 200 and txt.get("claimed"):
             return True
         raise BaseException(f"error struct, need update. response status {resp.status}, body: {txt}")
 
