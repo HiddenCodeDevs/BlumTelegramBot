@@ -27,7 +27,7 @@ async def main() -> None:
             if not action.isdigit():
                 logger.warning("Action must be number")
             elif int(action) not in actions:
-                logger.warning("Action must be 1 or 2")
+                logger.warning("Action must be <cyan>1</cyan> or <cyan>2</cyan>")
             else:
                 action = int(action)
                 break
