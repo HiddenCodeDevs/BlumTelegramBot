@@ -1,1 +1,5 @@
-http://WfjMc4:onKhFm@89.185.77.165:8000
+type://user:pass@ip:port
+type://user:pass:ip:port
+type://ip:port:user:pass
+type://ip:port@user:pass
+type://ip:port
