@@ -198,7 +198,7 @@ class Tapper:
 
             await asyncio.sleep(sleep_time)
             freezes = int((sleep_time - 30) / 3)
-            clover = randint(settings.POINTS[0], settings.POINTS[1]) # blum points
+            clover = ((randint(settings.POINTS[0], settings.POINTS[1])) // 5) * 5 # blum points
 
             blum_amount = clover
             earned_points = {"BP": {"amount": blum_amount}}
